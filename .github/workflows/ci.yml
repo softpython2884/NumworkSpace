@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Lint the sources
+        run: |
+          python3 tools/lint_globals.py src/nova*.py
+          python3 tools/fiximports.py --check
+
+      - name: dist/ must match src/
+        run: |
+          python3 tools/build.py
+          git diff --exit-code -- dist/ || {
+            echo "::error::dist/ is stale. Run tools/build.py and commit the result."
+            exit 1
+          }
+
+      - name: Test suite, on the sources and on the shipped build
+        run: python3 tests/run_all.py
+
+  memory:
+    # The binding limit is not file size but MicroPython heap, including the
+    # parse tree while a module compiles. Measure it on the real interpreter.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache the MicroPython build
+        id: mpcache
+        uses: actions/cache@v4
+        with:
+          path: tools/mp/micropython
+          key: micropython-1.17-${{ runner.os }}
+
+      - name: Build MicroPython 1.17 (the version Epsilon ships)
+        if: steps.mpcache.outputs.cache-hit != 'true'
+        run: tools/mp/build.sh
+
+      - name: Measure the heap the game needs
+        run: |
+          python3 tools/build.py
+          python3 tools/memcheck.py

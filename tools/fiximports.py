@@ -117,7 +117,9 @@ def wrap(module, names):
     return "\n".join(out)
 
 
-def main():
+def main(check=False):
+    """With check=True, report drift instead of rewriting -- for CI, which must
+    not leave the tree dirty."""
     src_dir = os.path.join(ROOT, "src")
     owner = {}             # name -> the module that defines it
     changed = []
@@ -161,8 +163,16 @@ def main():
                     continue
                 keep.append(line)
             text = "\n".join(keep)
-            with open(path, "w") as fh:
-                fh.write(text)
+            with open(path) as fh:
+                before = fh.read()
+            if check:
+                if text != before:
+                    print("ERROR: %s has stale imports. Run tools/fiximports.py"
+                          % mod)
+                    return 1
+            elif text != before:
+                with open(path, "w") as fh:
+                    fh.write(text)
             missing = sorted(n for n in need
                              if n not in owner and n not in BUILTINS)
             if missing:
@@ -185,4 +195,4 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main("--check" in sys.argv))

@@ -1,5 +1,10 @@
 # NOVA
 
+[![CI](https://github.com/softpython2884/NumworkSpace/actions/workflows/ci.yml/badge.svg)](https://github.com/softpython2884/NumworkSpace/actions/workflows/ci.yml)
+[![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
+[![Tas: 47/48 Ko](https://img.shields.io/badge/tas%20MicroPython-47%2F48%20Ko-brightgreen.svg)](docs/OPTIMIZATION.md)
+[![Plateforme: NumWorks](https://img.shields.io/badge/plateforme-NumWorks-orange.svg)](https://www.numworks.com/)
+
 Un rogue-lite spatial pour calculatrice **NumWorks**. Écrit en Python, tient dans
 les 32 Ko de mémoire de la machine, tourne à 25 images par seconde.
 
