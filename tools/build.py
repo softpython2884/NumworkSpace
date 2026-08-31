@@ -26,6 +26,10 @@ import tokenize
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# Load order matters, and it runs biggest module first: each one has less heap
+# left to compile in than the one before it.
+MODULES = ("novad.py", "novae.py", "novaf.py", "novag.py", "nova.py")
+
 # Names that must survive verbatim: the calculator's own API, plus anything the
 # language resolves by spelling.
 PROTECTED = {
@@ -109,12 +113,17 @@ def short_names():
         n += 1
 
 
-def collect(src):
-    """Every identifier we are allowed to rename, with its use count."""
+def collect(src, counts=None, imported=None, kwargs_used=None):
+    """Every identifier we are allowed to rename, with its use count.
+
+    The accumulators can be passed in so several modules share one table: a name
+    that novad exports and novac imports must be renamed identically in both, or
+    the star-import stops resolving.
+    """
     tree = ast.parse(src)
-    counts = {}
-    imported = set()
-    kwargs_used = set()
+    counts = {} if counts is None else counts
+    imported = set() if imported is None else imported
+    kwargs_used = set() if kwargs_used is None else kwargs_used
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute):
@@ -123,8 +132,16 @@ def collect(src):
         elif isinstance(node, ast.keyword) and node.arg:
             kwargs_used.add(node.arg)
         elif isinstance(node, ast.ImportFrom):
+            # Names taken from one of our own modules are ours to rename, as
+            # long as both sides get the same new spelling. Only names from the
+            # calculator's own modules must survive verbatim.
+            ours = node.module in {m[:-3] for m in MODULES}
             for a in node.names:
-                imported.add(a.asname or a.name)
+                nm = a.asname or a.name
+                if ours:
+                    counts[nm] = counts.get(nm, 0) + 1
+                else:
+                    imported.add(nm)
         elif isinstance(node, ast.Import):
             for a in node.names:
                 imported.add((a.asname or a.name).split(".")[0])
@@ -139,8 +156,7 @@ def collect(src):
             if node.args.kwarg:
                 counts[node.args.kwarg.arg] = counts.get(node.args.kwarg.arg, 0) + 1
 
-    banned = PROTECTED | imported | kwargs_used
-    return {n: c for n, c in counts.items() if n not in banned}, banned
+    return counts, PROTECTED | imported | kwargs_used
 
 
 def build_map(counts, banned):
@@ -251,66 +267,74 @@ def structural_signature(src):
 
 
 def main(argv):
-    src_path = os.path.join(ROOT, "src", "nova.py")
-    out_path = os.path.join(ROOT, "dist", "nova.py")
-    if len(argv) > 1:
-        src_path = argv[1]
-    if len(argv) > 2:
-        out_path = argv[2]
+    src_dir = os.path.join(ROOT, "src")
+    out_dir = os.path.join(ROOT, "dist")
+    os.makedirs(out_dir, exist_ok=True)
 
-    with open(src_path) as fh:
-        original = fh.read()
+    originals = {}
+    stripped = {}
+    counts = {}
+    imported = set()
+    kwargs_used = set()
 
-    step1 = strip_comments(original)
-    # Compare against the stripped source, not the original: removing docstrings
-    # legitimately removes string constants, and that must not read as damage.
-    before = structural_signature(step1)
-    counts, banned = collect(step1)
+    for m in MODULES:
+        with open(os.path.join(src_dir, m)) as fh:
+            originals[m] = fh.read()
+        stripped[m] = strip_comments(originals[m])
+        collect(stripped[m], counts, imported, kwargs_used)
+
+    banned = PROTECTED | imported | kwargs_used
+    # Module names appear in `from novad import *`, and the shipped file names
+    # have to keep matching them.
+    banned |= {m[:-3] for m in MODULES}
+    counts = {n: c for n, c in counts.items() if n not in banned}
     mapping = build_map(counts, banned)
-    step2 = rename(step1, mapping)
-    step3 = reindent(step2)
-    step4 = squeeze(step3)
 
-    # Verification: it must parse, and rename/indent/squeeze must not have
-    # changed what the code does. Identifier spellings may differ; node shapes
-    # and every constant must match exactly.
-    ast.parse(step4)
-    after = structural_signature(step4)
-    bshapes = [x for x in before if x[0] != "Name"]
-    ashapes = [x for x in after if x[0] != "Name"]
-    if bshapes != ashapes:
-        print("FAIL: minified code is not structurally identical")
-        from collections import Counter
-        lost = Counter(bshapes) - Counter(ashapes)
-        gained = Counter(ashapes) - Counter(bshapes)
-        for k, v in list(lost.items())[:8]:
-            print("   lost   x%-3d %s" % (v, k))
-        for k, v in list(gained.items())[:8]:
-            print("   gained x%-3d %s" % (v, k))
-        return 1
-
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    # Ship the rename table beside the build so the test suite can drive the
-    # minified file through the exact same tests as the source.
-    import json
-    with open(out_path.replace(".py", ".map.json"), "w") as fh:
-        json.dump(mapping, fh, indent=0, sort_keys=True)
     header = ("# NOVA - space rogue-lite for NumWorks. MIT licence.\n"
-              "# Generated from src/nova.py by tools/build.py -- do not edit.\n"
-              "# https://github.com/softpython2884/NumworkSpace\n")
-    with open(out_path, "w") as fh:
-        fh.write(header + step4)
+              "# Generated from src/ by tools/build.py -- do not edit.\n")
+    total_src = 0
+    total_out = 0
+    print("%-12s %9s %9s" % ("module", "source", "shipped"))
+    print("-" * 33)
+    for m in MODULES:
+        before = structural_signature(stripped[m])
+        step = squeeze(reindent(rename(stripped[m], mapping)))
+        ast.parse(step)
+        after = structural_signature(step)
+        bshapes = [x for x in before if x[0] != "Name"]
+        ashapes = [x for x in after if x[0] != "Name"]
+        if bshapes != ashapes:
+            print("FAIL: %s is not structurally identical after minifying" % m)
+            from collections import Counter
+            for k, v in list((Counter(bshapes) - Counter(ashapes)).items())[:6]:
+                print("   lost   x%-3d %s" % (v, k))
+            for k, v in list((Counter(ashapes) - Counter(bshapes)).items())[:6]:
+                print("   gained x%-3d %s" % (v, k))
+            return 1
+        out = header + step
+        with open(os.path.join(out_dir, m), "w") as fh:
+            fh.write(out)
+        total_src += len(originals[m])
+        total_out += len(out)
+        print("%-12s %9d %9d" % (m, len(originals[m]), len(out)))
 
-    a, b = len(original), len(header + step4)
-    print("source    : %6d bytes  %s" % (a, os.path.relpath(src_path, ROOT)))
-    print("minified  : %6d bytes  %s" % (b, os.path.relpath(out_path, ROOT)))
-    print("saved     : %6d bytes  (%.0f%%)" % (a - b, 100.0 * (a - b) / a))
-    print("identifiers renamed: %d" % len(mapping))
+    import json
+    with open(os.path.join(out_dir, "nova.map.json"), "w") as fh:
+        json.dump(mapping, fh, indent=0, sort_keys=True)
+
+    print("-" * 33)
+    print("%-12s %9d %9d" % ("total", total_src, total_out))
     print()
+    print("saved %d bytes (%.0f%%), %d identifiers renamed"
+          % (total_src - total_out,
+             100.0 * (total_src - total_out) / total_src, len(mapping)))
     budget = 32 * 1024
-    print("NumWorks script storage: %d bytes total for all scripts" % budget)
-    print("this script uses %.1f%% of it, %d bytes to spare" % (100.0 * b / budget, budget - b))
-    return 0 if b < budget else 1
+    print("script storage: %d of %d bytes (%.0f%%)"
+          % (total_out, budget, 100.0 * total_out / budget))
+    print()
+    print("Byte count is not the binding limit. Run tools/memcheck.py, which")
+    print("measures real MicroPython heap use including the compile peak.")
+    return 0 if total_out < budget else 1
 
 
 if __name__ == "__main__":

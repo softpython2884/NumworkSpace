@@ -1,8 +1,8 @@
-"""Simulate whole runs with a dodging pilot to check the difficulty curve.
+"""Simulate whole runs to check the difficulty curve and how long a run lasts.
 
-A sweeping bot walks into everything and tells us nothing about balance. This
-one scores the danger to its left and right and moves away from it, which is a
-rough but honest stand-in for a human player.
+The pilot in bot.py has perfect information and perfect reflexes but a naive
+strategy, so it should out-perform a person on a calculator keypad. A win rate
+that looks fair for the bot is a real challenge for a human.
 """
 
 import os
@@ -10,218 +10,150 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import harness
+from bot import Dodger
 
 
-class Dodger:
-    def __init__(self, g):
-        self.g = g
-        self.want = [0, 0]
-        self.tick = 0
-
-    def _decide(self, pi):
-        g = self.g
-        me = g["plx"][pi] + 7
-        left = right = 0
-        # incoming enemy fire, weighted by how close it is
-        for i in range(g["nf"]):
-            dy = g["PY"] - g["fy"][i]
-            if 0 < dy < 90:
-                dx = g["fx"][i] - me
-                w = 90 - dy
-                if -26 < dx < 0:
-                    left += w
-                elif 0 <= dx < 26:
-                    right += w
-        for i in range(g["ne"]):
-            dy = g["PY"] - g["ey"][i]
-            if 0 < dy < 110:
-                dx = g["ex"][i] - me
-                w = 60 - (dy >> 1)
-                # widen the no-go zone as it closes: lining up under a ship
-                # about to land on you is not aiming, it is a collision
-                near = 42 if dy < 64 else 30
-                if -near < dx < 0:
-                    left += w
-                elif 0 <= dx < near:
-                    right += w
-        if left or right:
-            if left > right:
-                return 1
-            if right > left:
-                return -1
-        # nothing dangerous: go collect the nearest pickup
-        best = None
-        for i in range(g["npk"]):
-            d = g["px"][i] - me
-            if best is None or abs(d) < abs(best):
-                best = d
-        if best is not None and abs(best) > 6:
-            return 1 if best > 0 else -1
-        # otherwise line up under a target and actually shoot it -- a human
-        # does not spend a boss fight running away from it
-        tgt = None
-        for i in range(g["ne"]):
-            d = g["ex"][i] + (g["EWD"][g["et"][i]] >> 1) - me
-            if tgt is None or abs(d) < abs(tgt):
-                tgt = d
-        if tgt is not None and abs(tgt) > 4:
-            return 1 if tgt > 0 else -1
-        return 0
-
-    def keydown(self, k):
-        g = self.g
-        self.tick += 1
-        if self.tick % 2 == 1:
-            self.want[0] = self._decide(0)
-            if g["pon"][1]:
-                self.want[1] = self._decide(1)
-        if k == g["K_L"]:
-            return self.want[0] < 0
-        if k == g["K_R"]:
-            return self.want[0] > 0
-        if k == g["K_4"]:
-            return self.want[1] < 0
-        if k == g["K_6"]:
-            return self.want[1] > 0
-        if k == g["K_EXE"]:
-            # fire the overdrive when the screen gets genuinely busy
-            return g["nf"] + g["ne"] > 12 and self.tick % 7 == 0
-        return False
-
-
-def full_run(seed, players=1, buy=True, difficulty=1, verbose=False):
-    """Play a whole run: real fights, scripted meta-screens."""
+def full_run(seed, players=1, buy=True, cap_sectors=5):
     g, kand, ion, clock = harness.load()
-    g["diff"] = difficulty
     g["keydown"] = Dodger(g).keydown
-    g["menukey"] = lambda: g["K_OK"]
-    g["flash"] = lambda m, c: None
+    g["mkey"] = lambda: g["KO"]
     g["time"].sleep = lambda d: None
+    S = g["S"]
+    # play() seeds from the clock, which the fake clock makes identical every
+    # run; pin it to the test's seed instead.
+    real_srnd = g["srnd"]
+    g["srnd"] = lambda _v, s=seed, f=real_srnd: f(s)
 
-    log = []
+    # Route policy: alternate pushing for loot and taking the safe option.
+    picks = [0]
 
-    # Shop policy: always buy the cheapest affordable upgrade, twice per visit.
-    def shop():
+    def choose():
+        n = S[g["NODE"]]
+        if n >= 6:
+            return 5
+        picks[0] += 1
+        opts = [0, 1, 2] if n & 1 else [0, 1, 3]
+        # heal when hurt, otherwise shop, otherwise fight
+        if 3 in opts and S[g["HULL"]] * 5 < S[g["HMAX"]] * 3:
+            return 3
+        if 2 in opts and S[g["CRY"]] >= 60:
+            return 2
+        return opts[1] if picks[0] % 3 == 0 else opts[0]
+    g["choose"] = choose
+
+    # Shop policy: buy the cheapest affordable upgrade, up to three times.
+    def trade(free):
+        ids = g["offers"]()
+        if not ids:
+            return
+        if free:
+            g["grant"](g["SHOP"][ids[0]][1])
+            return
         if not buy:
             return
         for _ in range(3):
-            ids = g["offers"](3)
+            ids = g["offers"]()
             best, bp = None, 10 ** 9
             for i in ids:
-                p = g["price"](i)
-                if p <= g["cry"] and p < bp:
+                p = g["cost"](i)
+                if p <= S[g["CRY"]] and p < bp:
                     best, bp = i, p
             if best is None:
                 return
-            g["cry"] -= bp
+            S[g["CRY"]] -= bp
             g["grant"](g["SHOP"][best][1])
-    g["shop"] = shop
+    g["trade"] = trade
 
-    def reward(big):
-        ids = g["offers"](3)
-        if ids:
-            g["grant"](g["SHOP"][ids[0]][1])
-    g["reward"] = reward
-
-    # Route choice: always take the first reachable node.
-    def choose_node():
-        for r in range(g["MROWS"]):
-            if abs(r - g["mrow"]) <= 1 and g["mt"][(g["mcol"] + 1) * g["MROWS"] + r] >= 0:
-                return r
-        return -1
-    g["choose_node"] = choose_node
-    g["draw_map"] = lambda sel: None
-
-    real_fight = g["fight"]
+    log = []
     frames = [0]
+    real_fight = g["fight"]
 
-    def fight(kind, idx):
-        hb = g["hull"]
-        n0 = [0]
-        real_hud = g["hud"]
+    def fight(kind):
+        hb = S[g["HULL"]]
+        n = [0]
+        real = g["hud"]
 
         def spy(tag):
-            n0[0] += 1
-            if n0[0] > 8000:
+            n[0] += 1
+            if n[0] > 8000:
                 raise RuntimeError("fight did not terminate")
-            real_hud(tag)
+            real(tag)
         g["hud"] = spy
-        won = real_fight(kind, idx)
-        g["hud"] = real_hud
-        frames[0] += n0[0]
-        log.append((g["sector"], idx, kind, n0[0], hb - g["hull"], won))
+        won = real_fight(kind)
+        g["hud"] = real
+        frames[0] += n[0]
+        log.append((S[g["SECT"]], S[g["NODE"]], kind, n[0], hb - S[g["HULL"]], won))
         return won
     g["fight"] = fight
 
-    g["newrun"](players, seed)
-    # Endless mode would never return: stop the run at the campaign's end.
-    g["menu"] = lambda items, cols, y0: (1 if "ENTER THE VOID" in items else 0)
-    won = g["play"]()
-    return {
-        "won": won,
-        "sector": g["sector"],
-        "score": g["score"],
-        "hull": g["hull"],
-        "hullmax": g["hullmax"],
-        "cry": g["cry"],
-        "up": list(g["up"]),
-        "fights": len(log),
-        "frames": frames[0],
-        "minutes": frames[0] * 0.04 / 60,
-        "log": log,
-    }
+    # play() loops forever in the Void; stop it at the campaign's end
+    real_play = g["play"]
+
+    def guard(tag, real=g["hud"]):
+        return real(tag)
+
+    won = [None]
+
+    def runner():
+        try:
+            return real_play(players)
+        except _Done:
+            return True
+    class _Done(Exception):
+        pass
+
+    # bound the number of sectors by watching the sector counter
+    real_panel = g["panel"]
+
+    def panel(head, tc):
+        if S[g["SECT"]] >= cap_sectors:
+            raise _Done
+        return real_panel(head, tc)
+    g["panel"] = panel
+
+    try:
+        result = real_play(players)
+    except _Done:
+        result = True
+    return {"won": result, "sector": S[g["SECT"]], "score": S[g["SCORE"]],
+            "hull": S[g["HULL"]], "hullmax": S[g["HMAX"]], "cry": S[g["CRY"]],
+            "up": list(g["UP"]), "fights": len(log), "frames": frames[0],
+            "minutes": frames[0] * 0.04 / 60, "log": log}
 
 
 def main():
+    seeds = (101, 777, 1234, 4242, 9001, 31415, 60007, 12)
     print("=== solo runs, dodging pilot, buying upgrades ===")
-    print("%6s %8s %8s %8s %7s %9s" %
+    print("%6s %9s %8s %7s %8s %8s" %
           ("seed", "reached", "score", "fights", "hull", "minutes"))
-    reached = []
+    reach = []
     mins = []
-    for seed in (101, 777, 1234, 4242, 9001, 31415, 60007, 12):
-        r = full_run(seed)
-        reached.append(r["sector"] + (1 if r["won"] else 0))
+    for s in seeds:
+        r = full_run(s)
+        depth = r["sector"] + (1 if r["won"] else 0)
+        reach.append(depth)
         mins.append(r["minutes"])
-        print("%6d %8s %8d %8d %7s %9.1f" %
-              (seed, ("WON" if r["won"] else "S%d" % (r["sector"] + 1)),
-               r["score"], r["fights"], "%d/%d" % (r["hull"], r["hullmax"]),
-               r["minutes"]))
+        print("%6d %9s %8d %7d %8s %8.1f" %
+              (s, "WON" if r["won"] else "S%d" % (r["sector"] + 1), r["score"],
+               r["fights"], "%d/%d" % (r["hull"], r["hullmax"]), r["minutes"]))
 
-    print()
-    print("=== no upgrades bought (floor of the difficulty curve) ===")
-    for seed in (101, 4242, 9001):
-        r = full_run(seed, buy=False)
-        print("  seed %-6d reached %-4s after %d fights" %
-              (seed, ("WON" if r["won"] else "S%d" % (r["sector"] + 1)), r["fights"]))
+    print("\n=== no upgrades bought (floor of the curve) ===")
+    for s in (101, 4242, 9001):
+        r = full_run(s, buy=False)
+        print("  seed %-6d %s after %d fights" %
+              (s, "WON" if r["won"] else "died in S%d" % (r["sector"] + 1),
+               r["fights"]))
 
-    print()
-    print("=== co-op, two dodging pilots ===")
-    for seed in (101, 4242):
-        r = full_run(seed, players=2)
-        print("  seed %-6d reached %-4s  score %d  %.1f min" %
-              (seed, ("WON" if r["won"] else "S%d" % (r["sector"] + 1)),
+    print("\n=== co-op, two dodging pilots ===")
+    for s in (101, 4242):
+        r = full_run(s, players=2)
+        print("  seed %-6d %s  score %d  %.1f min" %
+              (s, "WON" if r["won"] else "died in S%d" % (r["sector"] + 1),
                r["score"], r["minutes"]))
 
     print()
-    print("=== difficulty curve (win rate over 10 seeds) ===")
-    seeds = (101, 777, 1234, 4242, 9001, 31415, 60007, 12, 5150, 27182)
-    for d, name in enumerate(("CADET", "PILOT", "ACE")):
-        wins = 0
-        depth = 0
-        mm = 0.0
-        for sd in seeds:
-            r = full_run(sd, difficulty=d)
-            wins += 1 if r["won"] else 0
-            depth += r["sector"] + (1 if r["won"] else 0)
-            mm += r["minutes"]
-        print("  %-6s  win rate %3d%%   avg depth %.1f/5   avg %.1f min combat"
-              % (name, wins * 10, depth / len(seeds), mm / len(seeds)))
-
-    print()
-    avg_reach = sum(reached) / len(reached)
-    avg_min = sum(mins) / len(mins)
-    print("average sector reached : %.1f / 5" % avg_reach)
-    print("average run length     : %.1f min of combat" % avg_min)
+    print("average sector reached : %.1f / 5" % (sum(reach) / len(reach)))
+    print("average combat time    : %.1f min per run" % (sum(mins) / len(mins)))
     return 0
 
 

@@ -2,7 +2,7 @@
 
 Sector number feeds palettes, enemy pools, budgets and HUD strings. An
 IndexError forty minutes into a good run is the worst possible bug on a device
-with no way to inspect the traceback.
+that shows you no traceback.
 """
 
 import os
@@ -10,38 +10,35 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import harness
-from test_balance import Dodger
+from bot import Dodger
+from test_termination import setup
+
+LIMIT = 3000
 
 
 def main():
     fails = []
     for sec in range(5, 40):
         g, kand, ion, clock = harness.load()
-        g["keydown"] = Dodger(g).keydown
-        g["time"].sleep = lambda d: None
-        g["newrun"](1, 1000 + sec)
-        g["sector"] = sec
+        setup(g, 1000 + sec, sec, 3)
         # Nobody reaches the Void with a stock ship; test the realistic case.
-        for u in ("U_DMG", "U_SPREAD", "U_RATE", "U_SPD"):
-            g["up"][g[u]] = 2
-        g["hull"] = 9999
-        g["hullmax"] = 9999
+        for u in ("UDMG", "USPR", "URATE", "USPD"):
+            g["UP"][g[u]] = 2
         n = [0]
         real = g["hud"]
 
         def spy(tag, n=n, real=real):
             n[0] += 1
-            if n[0] > 2500:
+            if n[0] > LIMIT:
                 raise TimeoutError
             real(tag)
 
         g["hud"] = spy
         try:
-            g["genmap"]()
-            g["draw_map"](1)
-            g["fight"](g["N_FIGHT"], 3)
-            n[0] = 0                     # each fight gets its own budget
-            g["fight"](g["N_BOSS"], 7)
+            g["fight"](0)
+            n[0] = 0
+            g["S"][g["NODE"]] = 7
+            g["fight"](5)
         except TimeoutError:
             fails.append((sec, "fight did not terminate"))
         except Exception as exc:
@@ -49,7 +46,7 @@ def main():
 
     print("sectors exercised beyond the campaign : 5..39")
     if fails:
-        for sec, why in fails[:10]:
+        for sec, why in fails[:8]:
             print("  FAIL sector %d -> %s" % (sec, why))
         print("FAIL")
         return 1

@@ -3,167 +3,166 @@
 Le point n°1 du cahier des charges. Voici ce qui a été fait, pourquoi, et ce que
 ça donne mesuré.
 
-## Ce que la machine impose
+## La leçon principale : compter les octets ne sert à rien
 
-| Contrainte | Valeur | Conséquence |
-|---|---|---|
-| Écran | 320×222, module `kandinsky` | `fill_rect`, `set_pixel`, `draw_string`. **Pas de sprite, pas de blit, pas de double tampon** |
-| Tas Python | **32 Ko** | Contient le bytecode *et* tous les objets runtime |
-| Stockage scripts | **32 Ko** au total | Le jeu doit tenir dedans, avec le reste |
-| Interpréteur | MicroPython 1.17 | Accès global = recherche dans un dict ; accès local = index dans un tableau |
-| Entrées | `ion.keydown(k)` | Scrutation pure, pas d'événements, pas de répétition auto |
-| Fichiers | aucun (`os` absent) | Pas de sauvegarde possible |
-| Réseau | aucun | Pas de multi en ligne |
+La première version faisait **17 444 octets** dans un seul fichier, soit 53 % du
+stockage de la NumWorks. Elle semblait confortable. Elle a donné un
+`MemoryError` au lancement.
 
-## Les dix techniques
+La raison : les 32 Ko de tas Python ne contiennent pas le *fichier*, ils
+contiennent le bytecode compilé, tous les objets du runtime, **et l'arbre
+syntaxique complet du module pendant sa compilation**. MicroPython parse un
+module d'un seul bloc, et cet arbre pèse plusieurs fois la taille de la source.
 
-### 1. Rendu par rectangles sales — on n'efface jamais l'écran
+Mesuré sur le vrai interpréteur (`tools/memcheck.py`) :
 
-C'est la décision qui structure tout le reste. Repeindre l'écran chaque image
-coûterait 71 040 pixels. À la place, chaque objet mobile s'efface à sa position
-courante puis se redessine à la nouvelle : **2 appels par objet**, quelle que
-soit la taille de l'écran.
+| Version | Octets livrés | Tas nécessaire | Verdict |
+|---|---:|---:|---|
+| 1 fichier | 17 444 | **159 Ko** | `MemoryError` |
+| 5 modules équilibrés | 11 500 | **47 Ko** | passe |
 
-Mesuré : une image repeint entre **923 et 3 344 pixels**, soit 1,3 % à 4,7 % de
-l'écran.
+Le passage de 159 à 47 Ko ne vient qu'à 34 % de la réduction de code. Le reste
+vient de la **découpe** et de l'**ordre de chargement**.
 
-### 2. Effacer tout, puis dessiner tout
+## Comment mesurer, plutôt que deviner
 
-Dans l'ordre : effacer chaque entité → mettre à jour → dessiner chaque entité.
-Les deux phases ne sont pas fusionnées, parce qu'un objet dessiné avant qu'un
-autre ne se soit effacé par-dessus lui produit un scintillement à chaque image.
+`tools/mp/build.sh` compile MicroPython 1.17 — exactement la version qu'embarque
+Epsilon. `tools/memcheck.py` fait tourner le jeu dessus et cherche par
+dichotomie le plus petit tas capable de le charger.
 
-### 3. Pools compactés, zéro allocation en combat
+C'est l'outil qui manquait la première fois. Il est désormais dans le dépôt, et
+c'est lui qui a la dernière parole, pas la taille des fichiers.
 
-Projectiles, ennemis, ramassages et explosions vivent dans des pools de taille
-fixe alloués une seule fois. Les entités vivantes occupent les slots `0..n-1`, si
-bien que les boucles parcourent `range(n)` **sans test « est-elle vivante ? »**.
-Une entité qui meurt est remplacée par la dernière et `n` décroît.
+Le build local est en 64 bits, donc ses pointeurs sont deux fois plus larges que
+ceux du ARM 32 bits de la calculatrice ; l'arbre syntaxique, qui est presque
+entièrement fait de pointeurs, coûte environ 1,6 fois plus ici. Le budget de
+48 Ko utilisé par `memcheck` tient compte de cet écart et garde de la marge.
 
-Rien n'est alloué ni libéré pendant un combat, donc **le ramasse-miettes ne se
-déclenche jamais en pleine image** — c'est le premier tueur de fluidité en
-MicroPython.
+## Ce qui fait vraiment le pic
 
-### 4. Boucles à l'envers
+Trois découvertes, toutes contre-intuitives, toutes mesurées :
 
-Toutes les boucles de mise à jour descendent, `i = n-1` vers `0`. Conséquence :
-l'entité déplacée dans le slot `i` lors d'une suppression vient toujours d'un
-slot **déjà traité**. Aucune entité n'est sautée, aucune n'est mise à jour deux
-fois. En montant, il faudrait un `continue` qui retraiterait le slot.
+**1. C'est le plus gros module qui compte, pas le total.** Le pic vaut à peu
+près `résident déjà chargé + 12 × taille du module en cours`. Découper un jeu de
+11 Ko en modules de 2 à 3 Ko divise le pic par trois sans retirer une ligne.
 
-### 5. Listes parallèles d'entiers, pas d'objets
+**2. Le module racine est compilé en premier, avec un tas vide.** C'est donc lui
+qui peut être le plus gros. Chaque module chargé ensuite dispose de moins de
+place que le précédent, donc les tailles doivent décroître dans l'ordre de
+chargement. Déplacer une seule fonction (`paint`) vers la racine a fait tomber
+le pic de 50 à 46 Ko.
 
-`ex[i]` est une indexation. Un attribut de classe est une recherche de dict plus
-un en-tête d'objet qu'on ne peut pas se permettre sur 32 Ko. Aucune classe,
-aucun dictionnaire, aucune fermeture dans le jeu.
+**3. `from X import *` coûte cher.** Il recopie tous les noms publics du module
+source dans le dict de globals de l'importateur. Sur cinq modules, cela faisait
+plusieurs centaines d'entrées inutiles. `tools/fiximports.py` calcule, module par
+module, les noms réellement utilisés et réécrit les imports en liste explicite :
+**5,5 Ko de tas récupérés**, sans toucher au jeu.
 
-### 6. Liaison locale des fonctions chaudes
+Une quatrième piste s'est révélée fausse et mérite d'être notée : la profondeur
+d'imbrication semblait exploser le coût. Aplatir les fonctions les plus
+imbriquées (14 niveaux → 8) n'a rien changé. C'est bien la taille du module qui
+domine.
 
-```python
-fr = fill_rect
-for i in range(nb):
-    fr(bx[i], by[i], 2, 6, BLK)
-```
+## Les techniques de rendu
 
-En MicroPython, lire une globale traverse un dict ; lire une locale indexe un
-tableau. Sur une fonction appelée jusqu'à 30 fois par image, ce n'est pas de la
-micro-optimisation.
+### Rectangles sales — on n'efface jamais l'écran
 
-### 7. Entiers uniquement, jamais de trigonométrie
+Repeindre l'écran chaque image coûterait 71 040 pixels. À la place, chaque objet
+mobile s'efface à sa position courante puis se redessine : **2 appels par objet**.
 
-Aucun flottant dans la boucle de jeu. La visée des ennemis remplace un `atan2`
-par un décalage :
+Mesuré : une image repeint entre **902 et 2 966 pixels**, soit 1,3 % à 4,2 %.
 
-```python
-d = (plx[0] + 7 - cx) >> 5     # -2..2 de dérive horizontale
-```
+### Effacer tout, puis dessiner tout, et dans cet ordre
 
-Le générateur aléatoire est un xorshift 16 bits dont toutes les valeurs
-intermédiaires restent sous 2¹⁶, pour que MicroPython ne bascule jamais en
-entiers longs (ce qui allouerait). Période vérifiée : 65 535, distribution
-uniforme.
+`paint(acc, frame, bl)` fait les deux passes avec le même code : `bl=1` efface,
+`bl=0` dessine. Les deux ne sont pas fusionnées, parce qu'un objet dessiné avant
+qu'un autre ne se soit effacé par-dessus lui produit un scintillement.
 
-### 8. HUD redessiné champ par champ, seulement s'il change
+Cette passe d'effacement doit aussi tourner **avant** la lecture du clavier. Une
+régression l'avait placée après : le vaisseau s'effaçait à sa nouvelle position
+et laissait l'ancienne peinte, traçant une barre continue à l'écran. Aucun test
+de performance ne l'a vue — seule une capture d'écran l'a révélée.
 
-`draw_string` repeint une bande de 10×18 pixels **par caractère** : c'est l'appel
-le plus cher du jeu. Chaque champ du HUD garde sa dernière valeur affichée et ne
-se redessine que si elle a bougé.
+### Pools compactés, zéro allocation en combat
 
-### 9. Champ d'étoiles groupé par couche
+Projectiles, ennemis et tirs vivent dans des listes plates de taille fixe :
+l'entité `i` occupe `[i*w, i*w+w)`. Les vivantes occupent les slots `0..n-1`, si
+bien que les boucles parcourent `range(n)` **sans test « est-elle vivante ? »**,
+et supprimer une entité est **une seule affectation de tranche** au lieu de six.
 
-Trois couches de parallaxe avançant d'un pixel toutes les 1, 2 et 3 images. Une
-étoile qui ne bouge pas cette image **ne coûte rien du tout** — d'où le
-regroupement par couche plutôt qu'une position sous-pixel par étoile.
+Rien n'est alloué ni libéré pendant un combat : **le ramasse-miettes ne se
+déclenche jamais en pleine image**.
 
-Effet de bord utile : les étoiles se redessinent en permanence, donc celles
-qu'un vaisseau a effacées en passant se réparent toutes seules.
+### Boucles à l'envers
 
-### 10. Limiteur d'image, jamais de rattrapage
+Toutes les boucles de mise à jour descendent. L'entité déplacée lors d'une
+suppression vient donc toujours d'un slot **déjà traité** : aucune n'est sautée,
+aucune n'est traitée deux fois.
 
-```python
-d = tnext - time.monotonic()
-if d > 0: time.sleep(d)
-else:     tnext = t + FRAME    # en retard : on ne rattrape pas
-```
+### Le reste
 
-Le jeu tourne à la même vitesse sur tous les modèles. Si une image déborde, on ne
-tente pas de rattraper — ça téléporterait les entités les unes à travers les
-autres.
+- **Listes plates d'entiers**, jamais d'objets : `E[o+1]` est une indexation, un
+  attribut de classe est une recherche de dict.
+- **Liaison locale** des fonctions chaudes (`fr = fill_rect`) : lire une globale
+  traverse un dict, lire une locale indexe un tableau.
+- **Entiers uniquement** : la visée ennemie remplace un `atan2` par
+  `(PX[0] + 7 - cx) >> 5`.
+- **Xorshift 16 bits** dont toutes les valeurs restent sous 2¹⁶, pour que
+  MicroPython ne bascule jamais en entiers longs (ce qui allouerait). Période
+  vérifiée : 65 535, distribution uniforme.
+- **Tables en `bytes`** : un tuple de six entiers, c'est six pointeurs plus un
+  en-tête ; une chaîne de six octets, c'est six octets.
+- **HUD champ par champ**, redessiné seulement quand la valeur change :
+  `draw_string` repeint une bande de 10×18 pixels **par caractère**.
+- **Limiteur d'image sans rattrapage** : si une image déborde, on ne tente pas de
+  rattraper — ça téléporterait les entités les unes à travers les autres.
+
+Résultat : **92 appels de dessin** au pire cas mesuré, contre un budget de ~240.
 
 ## La chaîne de build
 
-`tools/build.py` transforme `src/nova.py` (lisible, commenté) en `dist/nova.py`
-(ce qu'on colle dans la machine), en trois passes :
-
-1. **Suppression** des commentaires et docstrings via `tokenize`, par plages de
-   texte — jamais par expression régulière, qui ne distingue pas un commentaire
-   d'un `#` dans une chaîne.
-2. **Renommage** des identifiants, les plus courts pour les plus fréquents.
-3. **Réindentation** à un espace par niveau, et compactage des espaces autour des
-   opérateurs.
+`tools/build.py` transforme `src/` (lisible, commenté) en `dist/` : suppression
+des commentaires et docstrings par plages de texte via `tokenize`, renommage des
+identifiants (les plus courts aux plus fréquents, **de façon cohérente entre
+modules**), réindentation à un espace.
 
 | | Octets |
 |---|---:|
-| `src/nova.py` | 46 022 |
-| `dist/nova.py` | **17 444** |
-| Gain | 62 % |
-| Part du stockage NumWorks | 53 % |
+| `src/` | 25 012 |
+| `dist/` | **11 500** |
+| Gain | 54 % |
 
 ### Comment on sait que le build est correct
 
-Trois filets, dans cet ordre :
-
 1. **`tools/lint_globals.py`** vérifie qu'aucune locale ni aucun paramètre ne
-   masque un nom de module. Le renommage se fait par orthographe, un symbole par
-   nom : cette garantie est ce qui le rend légitime. (Le linter a trouvé un vrai
-   `UnboundLocalError` et deux paramètres qui masquaient des fonctions.)
-2. **Comparaison structurelle** : l'AST avant et après doit être identique aux
-   noms près, constantes comprises.
-3. **`tests/run_all.py` rejoue toute la suite sur `dist/nova.py`.**
+   masque un nom de module — c'est ce qui rend le renommage par orthographe
+   légitime. Il a trouvé un vrai `UnboundLocalError` et deux paramètres qui
+   masquaient des fonctions.
+2. **`tools/fiximports.py`** refuse un module qui utilise un nom défini **plus
+   tard** dans la chaîne : Python ne s'en plaindrait qu'à l'exécution de la
+   ligne, potentiellement en pleine partie.
+3. **Comparaison structurelle** : l'AST avant et après minification doit être
+   identique aux noms près, constantes comprises.
+4. **`tests/run_all.py` rejoue toute la suite sur `dist/`.**
 
-Le troisième filet n'est pas du zèle. Une première version du minifieur laissait
-les identifiants d'un caractère intacts tout en réattribuant ces mêmes lettres à
+Le quatrième filet n'est pas du zèle. Une version du minifieur laissait les
+identifiants d'un caractère intacts tout en réattribuant ces mêmes lettres à
 d'autres symboles : deux variables distinctes fusionnaient silencieusement. La
 forme de l'AST était **inchangée**, donc la vérification structurelle ne voyait
-rien. Seule l'exécution du build a levé l'erreur. Le minifieur renomme désormais
-tous les identifiants et vérifie que le renommage est injectif et disjoint des
-noms conservés.
+rien. Seule l'exécution du build a levé l'erreur.
 
 ## Ce que le clavier a dicté
 
 La matrice 9×6 n'a pas de diode. Trois touches dont deux partagent une ligne et
 deux une colonne font apparaître une quatrième touche que personne n'a pressée.
 
-C'est ce qui a fixé le schéma de contrôle : **tir automatique** et déplacement
-horizontal seul, soit deux touches par joueur, plus une touche d'overdrive
-partagée. `tests/test_controls.py` énumère les 12 combinaisons que deux joueurs
-peuvent produire et vérifie qu'aucune ne peut créer de fantôme — le test
-contrôle aussi son propre détecteur sur un trio connu comme mauvais.
+D'où le **tir automatique** et le déplacement horizontal seul : deux touches par
+joueur, plus une touche d'overdrive partagée.
+`tests/test_controls.py` énumère les 12 combinaisons que deux joueurs peuvent
+produire et vérifie qu'aucune ne peut ghoster — le test contrôle aussi son
+propre détecteur sur un trio connu comme mauvais.
 
 ```
 P1 gauche  (0,0)      P2 gauche  (6,0)      overdrive EXE  (8,4)
 P1 droite  (0,3)      P2 droite  (6,2)      solo OK        (0,4)
 ```
-
-`KEY_BACK` n'est volontairement jamais utilisé : Epsilon peut interrompre le
-script dessus.
