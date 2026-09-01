@@ -387,7 +387,7 @@ class Boss:
                 self.x, self.y + 6, math.cos(a) * speed, math.sin(a) * speed, 2))
         combat.audio.play("enemy_shoot", 0.6, throttle=0.05)
 
-    def spiral(self, dt, combat, arms=2, rate=2.2, speed=100):
+    def spiral(self, dt, combat, arms=2, rate=2.2, speed=100, every=0.09):
         """A rotating stream, emitted continuously.
 
         The densest thing in the game and the fairest: the arms turn at a fixed
@@ -398,7 +398,7 @@ class Boss:
         self.stream_t -= dt
         if self.stream_t > 0:
             return
-        self.stream_t = 0.09
+        self.stream_t = every
         for i in range(arms):
             a = self.spin + i * (math.tau / arms)
             combat.shots.append(ent.EnemyBullet(
@@ -518,21 +518,22 @@ class Boss:
         """
         self.deploy_turrets(combat, 0)
         if self.phase == 2:
-            # Its damage came out right but 38% of fights still ended clean:
-            # a threat made of escorts is a threat you can delete, and once
-            # they are down there is nothing in the air. The last phase keeps
-            # something in the air whatever happens to the bays.
-            self.spiral(dt, combat, arms=2, rate=-2.2, speed=96)
+            # A threat made of escorts is a threat you can delete, and once the
+            # bays are empty there is nothing in the air at all -- 38% of these
+            # fights used to end without a scratch. A thin spiral keeps the
+            # pressure alive; at full density it took the fight to 75 seconds
+            # and 11 hull, so this one is emitted at half the usual rate.
+            self.spiral(dt, combat, arms=2, rate=-2.2, speed=96, every=0.17)
         self.spawn_t -= dt
         if self.spawn_t <= 0:
-            self.spawn_t = (3.0, 2.4, 1.8)[self.phase]
+            self.spawn_t = (3.4, 2.8, 2.2)[self.phase]
             wave = (3, 4, 5)[self.phase]
             for i in range(wave):
                 kind = data.RUSHER_ID if i % 2 else data.GRUNT_ID
                 combat.spawn_escort(kind,
                                     self.x + (i - (wave - 1) / 2.0) * 18,
                                     self.y + 12)
-            if self.phase >= 1:
+            if self.phase >= 2:
                 # down the flanks, where nobody is looking
                 for x in (data.PLAY_L + 26, data.PLAY_R - 26):
                     combat.spawn_escort(data.RUSHER_ID, x, data.TOP + 8)

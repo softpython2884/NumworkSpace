@@ -407,7 +407,7 @@ SHOP = (
 # The tiers separate on rate of fire and on the depth of the hull bar instead.
 DIFFICULTIES = (
     ("CADET", 24, 0.85, 0.0, "Forgiving. Learn the patterns."),
-    ("PILOT", 18, 1.00, 0.45, "The intended fight."),
+    ("PILOT", 18, 1.00, 0.35, "The intended fight."),
     ("ACE", 12, 1.15, 0.78, "Fast, dense, unkind."),
 )
 
