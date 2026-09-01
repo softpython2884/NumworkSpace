@@ -110,11 +110,18 @@ et rien sur quoi revenir — et huit mesures font quinze secondes, donc toute
 l'idée repassait quatre fois par minute.
 
 C'est une chanson maintenant : une progression d'accords, une basse marchante,
-un comping syncopé, une batterie, et **un motif** développé sur quatre sections
+et **un motif** développé sur quatre sections
 — A, B, A' une octave au-dessus, puis un C dépouillé. Le motif est tiré de la
 graine une seule fois, puis répondu, transposé et orné, au lieu d'être retiré à
 chaque mesure. Une phrase entendue quatre fois est une mélodie ; quatre phrases
 différentes sont du bruit bien élevé.
+
+Et chaque section a sa propre figure d'arpège et sa propre basse : la première
+version en gardait une seule sur les trente-deux mesures et ne changeait que
+l'octave de la mélodie, ce qui fait quatre sections sur le papier et une seule
+à l'oreille. La section B fait tourner la progression d'un cran, les phrases
+courent sur quatre mesures au lieu de deux, et la dernière mesure de chaque
+section retire l'arpège pour qu'on entende la couture entre les sections.
 
 Six morceaux de **56 à 80 secondes** — un par secteur, plus un pour le Vide, qui
 ne recommence donc plus la musique du secteur 1. Chacun coûte 6,5 Mo de
@@ -227,14 +234,21 @@ secteur 3  + TURRET, LANCER   le Vide    + PHANTOM
 ```
 
 Les trois derniers prennent chacun une mécanique à un boss et la boulonnent sur
-quelque chose de mortel. C'est tout l'intérêt : un boss t'apprend une attaque
+quelque chose de mortel.
+
+Le rayon du LANCER était d'abord vertical, tiré vers le bas depuis un vaisseau
+au milieu de l'arène : il commençait nulle part et s'arrêtait au sol. Il avait
+l'air coupé parce qu'il **était** coupé — un rayon dont une extrémité pend dans
+le vide se lit comme un défaut d'affichage, pas comme une arme. Deux émetteurs
+s'amarrent aux murs opposés et le tendent entre eux, donc les deux bouts sont
+attachés à quelque chose. C'est tout l'intérêt : un boss t'apprend une attaque
 une fois, puis l'attaque revient sur un vaisseau que tu peux abattre.
 
 ![Les ennemis tardifs](../docs/img/pc-foes.png)
 
 | | |
 |---|---|
-| **LANCER** | Le **rayon** de LANCE. Il vise, charge 0,85 s, tire. Le rayon reste verrouillé là où il visait — et le tuer pendant la charge emporte le rayon avec lui. Une priorité de cible, pas une fatalité. |
+| **LANCER** | Ils arrivent **par deux**, un contre chaque mur, et tendent un rayon horizontal entre eux d'un bord à l'autre de l'arène. Une seconde de télégraphe, puis le tir. Tuer l'un des deux fait tomber le rayon : la paire est la mécanique, casser le lien est la réponse. |
 | **SPINNER** | Les anneaux de SENTINEL. Le seul ennemi du bestiaire qui ne se soucie pas d'où tu es, ce qui le rend gênant à côté de tous ceux qui te visent. |
 | **PHANTOM** | Le Vide seulement. **Dash arrière et latéral**, déclenché par le fait que tu sois aligné dessous — donc se garer en dessous et tenir la gâchette, ce que la cadence de tir du Vide t'a appris à faire, est exactement ce qui échoue. |
 
@@ -536,7 +550,8 @@ publiés mesuraient du bruit) :
 
 | | |
 |---|---|
-| Taux de victoire (bot) | Cadet 18/24 · **Pilote 12/24** · As 3/24 |
+| Coque du boss, tir parfait | **12 à 16 s** à tous les stades (3,2 s avant au secteur 5) |
+| Taux de victoire (bot) | plus significatif pour l'instant — voir plus bas |
 | Coque à l'entrée du boss | **75 %** de la barre (89 % avant) |
 | Dégâts pris par boss | **3,6** points de coque (0,6 avant) |
 | Combats de boss sans une égratignure | **17 %** (57 % avant) |
@@ -546,7 +561,44 @@ publiés mesuraient du bruit) :
 | Pire cas mesuré | WARDEN phase 3 en coop, **305 entités** à l'écran |
 | Construction des sons | 24 échantillons en **0,03 s** au démarrage |
 
-L'échelle est monotone — 75 %, 50 %, 13 % — et elle ne l'a été qu'à partir du
+### Le banc ne sait plus mesurer les boss, et il faut le dire
+
+Un retour de partie réelle : « les boss, on les bute super vite ». Vérifié, et
+c'était pire que ça. Les points de vie d'un boss valent `base + k x dps`, où `k`
+est littéralement **le nombre de secondes de tir parfait** que le combat doit
+durer. Il valait 2,6. Un boss du secteur 5 face à un vaisseau maxé garé dessous
+mourait en **3,2 secondes** — et ça *empirait* à mesure qu'on améliorait son
+vaisseau, parce que le terme qui suit les dégâts était le petit.
+
+Ça a tenu longtemps parce que le banc mentait. Le pilote de test tient sa ligne
+sur un boss **31 % du temps** : il esquive au lieu de viser. Un combat de 45
+secondes dans le banc était un combat de 4 secondes dans le jeu. Régler la
+difficulté là-dessus, c'était la régler pour quelqu'un qui ne tire pas.
+
+`k` vaut maintenant `8 + 1,5 x secteur` : **12 à 16 secondes de tir parfait
+partout**, au lieu de 9 s au premier boss et 3,2 s au dernier. Et l'enrage, qui
+accélère un combat qui s'éternise, démarrait à 45 secondes parce que c'était la
+durée d'un combat ; sur des combats de quarante à soixante secondes il ne
+réglait plus un blocage, il exécutait le joueur à tous les coups. Repoussé à
+80 s, sur une pente plus douce.
+
+Conséquence honnête : **le pilote de test ne bat plus aucun boss**, donc les
+taux de victoire par partie ne veulent plus rien dire. Le banc affiche à la
+place la seule mesure qui ne dépend pas de lui — les secondes de tir parfait —
+et les mesures de carte, de bestiaire et de budget d'image restent valables. Un
+pilote capable de se battre reste à écrire.
+
+Deux de mes propres détours sont consignés dans le code pour que personne ne
+les refasse. « Dégâts infligés / dps théorique » n'est pas de la précision :
+BULWARK et WARDEN divisent chaque coup par quatre tant que leurs modules
+tiennent, donc ce ratio ne peut pas dépasser 25 % sur deux des cinq boss. Et
+« viser pendant la fenêtre de tir » s'est mesuré à l'envers — l'alignement est
+tombé de 31 % à 11 % — parce que la fenêtre, c'est exactement le moment où la
+rafale qui vient d'être tirée traverse l'arène.
+
+### Ce que l'échelle donnait avant ce changement
+
+L'échelle était monotone — 75 %, 50 %, 13 % — et elle ne l'a été qu'à partir du
 moment où les secteurs tardifs ont eu de quoi remplir l'écran. Avant, Cadet et
 Pilote finissaient à égalité (13 contre 14) : ce que Cadet donne, c'est surtout
 de la coque en plus, et un pilote qui se fait peu toucher ne la dépense jamais.
