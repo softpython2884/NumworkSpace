@@ -56,3 +56,20 @@ jobs:
         run: |
           python3 tools/build.py
           python3 tools/memcheck.py
+
+  pc:
+    # The pygame build runs headless with the dummy SDL drivers, so the whole
+    # suite -- real runs through the real state machine -- works in CI.
+    runs-on: ubuntu-latest
+    env:
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pygame
+        run: pip install -r pc/requirements.txt
+      - name: PC test suite
+        run: python3 pc/tests/run_all.py

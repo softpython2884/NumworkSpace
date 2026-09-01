@@ -4,9 +4,35 @@
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
 [![Tas: 47/48 Ko](https://img.shields.io/badge/tas%20MicroPython-47%2F48%20Ko-brightgreen.svg)](docs/OPTIMIZATION.md)
 [![Plateforme: NumWorks](https://img.shields.io/badge/plateforme-NumWorks-orange.svg)](https://www.numworks.com/)
+[![PC: pygame](https://img.shields.io/badge/PC-pygame-9c6ade.svg)](pc/README.md)
 
-Un rogue-lite spatial pour calculatrice **NumWorks**. Écrit en Python, tient dans
-les 32 Ko de mémoire de la machine, tourne à 25 images par seconde.
+Un rogue-lite spatial, en deux éditions :
+
+- **[Calculatrice NumWorks](#édition-numworks)** — Python pur, tient dans les 32 Ko de
+  tas de la machine, 25 images par seconde.
+- **[PC (pygame)](pc/README.md)** — le même jeu, sans la camisole mémoire :
+  carte de secteur dessinée, 12 améliorations, 3 difficultés, événements,
+  particules, filtre CRT.
+
+![NOVA sur PC](docs/img/pc-03-fight.png)
+
+*L'édition PC. La version calculatrice est plus bas.*
+
+## Édition PC
+
+```bash
+cd pc && pip install pygame && python3 nova.py
+```
+
+| | |
+|---|---|
+| ![Carte de secteur](docs/img/pc-02-map.png) | ![Boss](docs/img/pc-04-boss.png) |
+| La carte de secteur à embranchements | Boss en phase 2 |
+
+Déplacement 8 directions, tir automatique, coop 2 joueurs sur le même clavier.
+Tout est dans [pc/README.md](pc/README.md).
+
+## Édition NumWorks
 
 ![Écran-titre](docs/img/01-title.png)
 
@@ -24,7 +50,7 @@ affrontes un boss — cinq secteurs, puis **le Vide**, qui n'a pas de fin.
 *(Rendu de l'émulateur headless : les textes apparaissent en blocs parce que le
 stub ne dessine pas les glyphes. Sur la calculatrice, ce sont de vraies lettres.)*
 
-## Installation
+### Installation
 
 Le jeu est en **5 scripts**. Ce n'est pas un caprice : MicroPython compile un
 module d'un seul bloc et garde tout son arbre syntaxique en mémoire, donc c'est
@@ -45,7 +71,7 @@ du fichier correspondant dans `dist/` :
 Puis envoie-les sur la calculatrice et lance **`nova`** (les quatre autres se
 chargent tout seuls). Détails et dépannage : [docs/INSTALL.md](docs/INSTALL.md).
 
-## Contrôles
+### Contrôles
 
 | | Joueur 1 | Joueur 2 (coop) |
 |---|---|---|
@@ -63,7 +89,7 @@ atteignable ne peut créer de fantôme, et
 
 `RETOUR` n'est jamais lue : Epsilon peut interrompre le script dessus.
 
-## Le jeu
+### Le jeu
 
 - **Trois routes par saut** : patrouille, patrouille d'élite, marchand ou
   atelier de réparation. Sept nœuds par secteur, puis le boss.
@@ -78,7 +104,7 @@ Mesuré sur des parties simulées : **7 minutes de combat pur** par partie, soit
 douze à quinze minutes une fois comptés les menus. Le design complet et ce que
 le matériel a imposé : [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md).
 
-## Performances
+### Performances
 
 La NumWorks donne à Python **32 Ko de tas**, avec une API graphique sans sprite,
 sans blit et sans double tampon. NOVA n'efface jamais l'écran : chaque objet
