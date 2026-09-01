@@ -247,56 +247,247 @@ def build_effects():
     return fx
 
 
-# One scale and tempo per sector, so the five of them do not sound alike.
+# --- music ---------------------------------------------------------------
+#
+# The old bed was eight bars of eighth notes: a triangle bass on every fourth
+# step and, on the rest, a *random* note from a four-note scale. Random notes
+# are not a melody -- there is nothing to remember and nothing to come back to
+# -- and eight bars is fifteen seconds, so the whole idea went past four times
+# a minute. It clicked on the repeat, too: measured, three of the five loops
+# ended on a waveform step 34 to 59 times a normal sample-to-sample jump, which
+# is a tick you can hear every time round.
+#
+# This is a song instead: a chord progression and one motif that gets answered,
+# transposed and ornamented across four sections -- about seventy seconds
+# before it comes round, and no seam when it does.
+#
+# The instruments stay exactly what they were. A first pass added drums and
+# syncopated stabs and it stopped sounding like the game: three voices is what
+# an NES gives you for music -- one triangle, two pulses -- and that limit is
+# the sound, not an obstacle to it. Structure is what the old bed was missing,
+# not instrumentation.
+
+_MINOR = (0, 2, 3, 5, 7, 8, 10)
+_DORIAN = (0, 2, 3, 5, 7, 9, 10)
+
+
+def _hz(semitone):
+    """Frequency of a semitone offset from C4."""
+    return 440.0 * (2.0 ** ((semitone - 9) / 12.0))
+
+
+def _degree(scale, d):
+    """Scale degree to semitones, wrapping into octaves above and below."""
+    return scale[d % 7] + 12 * (d // 7)
+
+
+def _triad(scale, d):
+    return tuple(_degree(scale, d + i) for i in (0, 2, 4))
+
+
+# root (semitones from C), scale, progression as scale degrees, bpm
+#
+# Minor keys throughout: a run lasts a quarter of an hour and relentless
+# cheerfulness does not survive that. Straight eighths, no swing -- the old bed
+# was straight and that squareness is part of the era.
 SECTOR_TRACKS = (
-    (("C", "D#", "G", "A#"), 3, 120),
-    (("D", "F", "A", "C"), 3, 132),
-    (("A", "C", "E", "G"), 2, 108),
-    (("F", "G#", "C", "D#"), 3, 144),
-    (("E", "G", "A#", "D"), 2, 152),
+    (0,  _MINOR,  (0, 5, 2, 6), 104),   # C  minor   i VI III VII
+    (2,  _DORIAN, (0, 3, 0, 6), 116),   # D  dorian  i IV  i   VII
+    (-3, _MINOR,  (0, 4, 5, 6), 96),    # A  minor   i v   VI  VII
+    (5,  _MINOR,  (0, 6, 5, 4), 128),   # F  minor   i VII VI  v
+    (4,  _MINOR,  (0, 2, 6, 3), 138),   # E  minor   i III VII IV
+    (1,  _DORIAN, (0, 6, 4, 5), 112),   # the Void, unhurried
 )
+
+BARS_PER_SECTION = 8
+SECTIONS = 4
+
+
+def track_for(sector):
+    """Which track a sector plays.
+
+    Everything past the campaign is the Void, and it gets its own rather than
+    starting the first sector's music over -- the endless part of the game
+    should not sound like the beginning of it.
+    """
+    return min(sector, len(SECTOR_TRACKS) - 1)
+
+
+class _Canvas:
+    """A song rendered by placing notes at times, not by concatenating slots.
+
+    The old builder glued one array per eighth note end to end, which forces
+    every voice onto the same rigid grid: nothing can ring past its slot,
+    nothing can overlap, and nothing can sit a little late. Writing into one
+    buffer allows all three -- and it is what makes the loop seamless, because
+    a note still sounding at the end can be folded back onto the beginning.
+    """
+
+    def __init__(self, seconds, tail=2.5):
+        self.n = int(seconds * RATE)
+        self.buf = _np.zeros(self.n + int(tail * RATE), dtype=_np.float32)
+
+    def add(self, t, wave, gain=1.0):
+        i = int(t * RATE)
+        if i < 0 or i >= len(self.buf):
+            return
+        j = min(len(self.buf), i + len(wave))
+        self.buf[i:j] += wave[:j - i] * gain
+
+    def loop(self):
+        """Fold the tail back onto the head.
+
+        A note still ringing when the loop ends carries into the start of the
+        next pass, exactly as it would if the song simply kept playing. Cutting
+        it instead is what left the step in the waveform.
+        """
+        out = self.buf[:self.n].copy()
+        tail = self.buf[self.n:]
+        m = min(len(tail), self.n)
+        out[:m] += tail[:m]
+        return out
+
+
+def _motif(rng):
+    """A phrase, chosen once and then used all the way through.
+
+    This is the whole difference between the old bed and a tune. The notes
+    still come out of a generator, but they are drawn once and then answered,
+    transposed and ornamented rather than re-rolled every bar. A phrase you
+    hear four times is a melody; four different phrases are noise with better
+    manners.
+
+    Returns [(scale degree, length in beats)] totalling eight beats.
+    """
+    shapes = ((1.0, 0.5, 0.5, 1.0, 1.0, 0.5, 0.5, 1.0, 2.0),
+              (1.5, 0.5, 1.0, 1.0, 0.5, 0.5, 1.0, 2.0),
+              (0.5, 0.5, 1.0, 2.0, 0.5, 0.5, 1.0, 2.0),
+              (2.0, 1.0, 1.0, 0.5, 0.5, 1.0, 2.0))
+    rhythm = list(rng.choice(shapes))
+    d = rng.choice((0, 2, 4))
+    out = []
+    for i, length in enumerate(rhythm):
+        out.append((d, length))
+        # Mostly steps, occasionally a leap, and pulled back if it wanders:
+        # a motif that walks off never sounds like it came back.
+        step = rng.choice((-2, -1, -1, 1, 1, 2, 3, -3))
+        d += step
+        if d > 9:
+            d -= 7
+        elif d < -3:
+            d += 7
+    return out
+
+
+def _answer(motif, rng):
+    """The second half of the phrase: same rhythm, resolving to the tonic."""
+    out = []
+    n = len(motif)
+    for i, (d, length) in enumerate(motif):
+        if i >= n - 2:
+            d = 0 if i == n - 1 else rng.choice((1, 2, -1))
+        else:
+            d = d - rng.choice((0, 1, 2))
+        out.append((d, length))
+    return out
+
+
+def _lead_note(freq, seconds):
+    """Pulse one: the melody."""
+    return Synth.env(Synth.square(freq, seconds * 0.96, 0.5),
+                     attack=0.008, hold=seconds * 0.5, curve=2.2)
+
+
+def _arp_note(freq, seconds):
+    """Pulse two: the arpeggio, thinner so it sits under the tune."""
+    return Synth.env(Synth.square(freq, seconds * 0.9, 0.25),
+                     attack=0.002, curve=3.0)
+
+
+def _bass_note(freq, seconds):
+    """The triangle channel."""
+    return Synth.env(Synth.triangle(freq, seconds * 0.92),
+                     attack=0.006, hold=seconds * 0.55, curve=1.8)
 
 
 def build_track(index, seed=0):
-    """A looping bass-and-arpeggio bed, generated per sector.
+    """Four sections of eight bars: A, B, A' an octave up, then a sparse C.
 
-    Two voices: a triangle bass on the root, and a square arpeggio walking the
-    scale. Structure comes from the seed, so every sector's loop is its own
-    without anybody having to compose one.
+    Three voices, the same three the old bed had. What is new is that they are
+    playing something: a chord progression underneath, and a melody that comes
+    back rather than a fresh handful of random notes every bar.
     """
-    S = Synth
-    scale, octave, bpm = SECTOR_TRACKS[index % len(SECTOR_TRACKS)]
-    rng = random.Random(seed * 31 + index)
-    beat = 60.0 / bpm / 2.0            # eighth notes
-    bars = 8
-    steps = bars * 8
+    root, scale, prog, bpm = SECTOR_TRACKS[index % len(SECTOR_TRACKS)]
+    rng = random.Random(seed * 977 + index * 31 + 7)
 
-    bass = []
-    lead = []
-    for i in range(steps):
-        root = scale[(i // 8) % len(scale)]
-        # bass: root on the beat, rest between
-        if i % 4 == 0:
-            b = S.env(S.triangle(note(root, octave - 1), beat * 0.95),
-                      attack=0.004, hold=beat * 0.4, curve=2.0) * 0.9
-        else:
-            b = S.silence(beat)
-        bass.append(b)
+    beat = 60.0 / bpm
+    bar = beat * 4.0
+    bars = BARS_PER_SECTION * SECTIONS
+    song = _Canvas(bars * bar)
 
-        if rng.random() < 0.78:
-            n = scale[rng.randrange(len(scale))]
-            o = octave + (1 if rng.random() < 0.45 else 0)
-            l = S.env(S.square(note(n, o), beat * 0.9, 0.25),
-                      attack=0.002, curve=3.0) * 0.32
-            l = _np.concatenate([l, S.silence(beat * 0.1)])
-        else:
-            l = S.silence(beat)
-        lead.append(l)
+    motif = _motif(rng)
+    answer = _answer(motif, rng)
 
-    b = S.cat(*bass)
-    l = S.cat(*lead)
-    n = min(len(b), len(l))
-    return _to_sound(S.mix(b[:n], l[:n]), 0.55)
+    for section in range(SECTIONS):
+        base = section * BARS_PER_SECTION
+        # A B A' C. The third lifts an octave, the fourth thins out -- the
+        # oldest way there is of making a repeat feel like a development.
+        octave_up = 12 if section == 2 else 0
+        sparse = section == 3
+        transpose = 2 if section == 1 else 0
+
+        for b in range(BARS_PER_SECTION):
+            bar_i = base + b
+            t0 = bar_i * bar
+            chord = _triad(scale, prog[b % len(prog)])
+            chord_root = root + chord[0]
+            nxt = _triad(scale, prog[(b + 1) % len(prog)])[0] + root
+
+            # --- triangle: bass ------------------------------------------
+            # Root, fifth, root, then a step toward the next chord. The
+            # approach note is what stops four bars of three notes from
+            # sounding like a metronome with a pitch.
+            walk = ((0.0, chord_root - 12, 1.0),
+                    (1.5, chord_root - 5, 0.5),
+                    (2.0, chord_root - 12, 1.0),
+                    (3.5, nxt - 13, 0.5))
+            for pos, semi, length in walk:
+                if sparse and pos not in (0.0, 2.0):
+                    continue
+                song.add(t0 + pos * beat,
+                         _bass_note(_hz(semi), length * beat), 0.62)
+
+            # --- pulse two: arpeggio -------------------------------------
+            # Eighths climbing and falling through the chord. This is the one
+            # voice the old bed already had right; it just had no chord to
+            # walk, so it walked a scale at random.
+            if not sparse:
+                shape = (0, 1, 2, 1, 2, 1, 0, 1)
+                for e in range(8):
+                    semi = root + chord[shape[e]] + (12 if e >= 4 else 0)
+                    song.add(t0 + e * 0.5 * beat,
+                             _arp_note(_hz(semi), beat * 0.5), 0.17)
+            else:
+                for e in (0, 2, 4, 6):
+                    semi = root + chord[e // 2 % 3] + 12
+                    song.add(t0 + e * 0.5 * beat,
+                             _arp_note(_hz(semi), beat * 0.5), 0.13)
+
+            # --- pulse one: the tune -------------------------------------
+            phrase = motif if (b % 4) < 2 else answer
+            if b % 2 == 0:
+                t = 0.0
+                for d, length in phrase:
+                    if t >= 8.0:
+                        break
+                    semi = root + _degree(scale, d + transpose) + 12 + octave_up
+                    dur = length * beat * (2.0 if sparse else 1.0)
+                    song.add(t0 + t * beat, _lead_note(_hz(semi), dur), 0.34)
+                    t += length
+                    if sparse and t >= 4.0:
+                        break
+
+    return _to_sound(song.loop(), 0.62)
 
 
 class Audio:
@@ -388,11 +579,16 @@ class Audio:
     def music(self, sector, seed=0):
         if not self.ok or self.mode == self.OFF:
             return
-        key = (sector % len(SECTOR_TRACKS), seed)
+        key = (track_for(sector), seed)
         if self.current_track == key and self.music_channel.get_busy():
             return
         track = self.tracks.get(key)
         if track is None:
+            # Only the one playing is kept. A seventy-second track is around
+            # six megabytes of samples, and there is never a reason to hold
+            # five of them when you can hear one -- rebuilding costs a fifth
+            # of a second, once, on a screen where nothing is moving.
+            self.tracks.clear()
             track = build_track(key[0], seed)
             self.tracks[key] = track
         self.current_track = key

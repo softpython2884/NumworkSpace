@@ -223,14 +223,36 @@ def main():
         ok = False
     print("mute modes      : %s" % " -> ".join(a.MODE_NAMES))
 
-    # music: one track per sector, and they must differ
+    # --- music -----------------------------------------------------------
+    # One track per sector plus one for the Void, all different, all long
+    # enough to be a song, and all looping without a click.
+    import numpy as _np
     lengths = []
-    for sector in range(5):
+    for sector in range(len(audio_mod.SECTOR_TRACKS)):
         track = audio_mod.build_track(sector, 3)
-        lengths.append(round(track.get_length(), 2))
+        lengths.append(round(track.get_length(), 1))
+
+        a = pygame.sndarray.array(track).astype(_np.float64)[:, 0] / 32768.0
+        # The seam, measured against the wave's own statistics: play the loop
+        # twice and look at the join the way you would look at any other
+        # sample step. A click sits far above the rest -- three of the five
+        # original tracks joined at five to sixteen times their p99, which is
+        # audible every time round.
+        inside = _np.abs(_np.diff(a))
+        join = abs(a[0] - a[-1])
+        p99 = _np.percentile(inside, 99)
+        if join > p99:
+            print("FAIL: track %d clicks on the loop: join %.5f vs p99 %.5f"
+                  % (sector, join, p99))
+            ok = False
+        if track.get_length() < 45.0:
+            print("FAIL: track %d is only %.1fs -- too short to be a loop you"
+                  " can listen to for an hour" % (sector, track.get_length()))
+            ok = False
+
     print("sector tracks   : %s seconds" % lengths)
-    if len(set(lengths)) < 2:
-        print("FAIL: every sector track is the same length -- likely identical")
+    if len(set(lengths)) < len(lengths) - 1:
+        print("FAIL: the sector tracks are not distinct enough")
         ok = False
 
     # the game must survive with no audio device at all

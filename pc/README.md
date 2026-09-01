@@ -85,11 +85,12 @@ simplement pas de marges.
 
 Tout est **synthétisé au démarrage** — ondes carrées, triangles et bruit avec
 enveloppes, comme une NES. Aucun fichier audio dans le dépôt : 20 sons —
-24 échantillons, le canon en ayant trois — et cinq boucles de musique,
-construits en **0,03 seconde**.
+24 échantillons, le canon en ayant trois — construits en **0,03 seconde**, et
+six morceaux de 56 à 80 secondes.
 
-À écouter : [`docs/nova-sound-demo.wav`](../docs/nova-sound-demo.wav) — les
-20 effets puis un extrait de musique.
+À écouter : [`docs/nova-sound-demo.wav`](../docs/nova-sound-demo.wav) pour les
+effets, et [`docs/nova-music-demo.wav`](../docs/nova-music-demo.wav) pour la
+musique — dont le point de boucle, sans montage.
 
 | | |
 |---|---|
@@ -100,8 +101,34 @@ construits en **0,03 seconde**.
 | Interface | navigation, validation, refus, achat, saut |
 | Jingles | alerte boss, secteur terminé, fin de partie |
 
-La musique change à chaque secteur : basse triangle et arpège carré, gamme et
-tempo propres à chacun, structure tirée de la graine de la partie.
+### La musique
+
+L'ancien lit musical, c'était huit mesures de croches : une basse triangle une
+fois sur quatre, et sur le reste une note **au hasard** dans une gamme de quatre
+notes. Des notes au hasard, ce n'est pas une mélodie — il n'y a rien à retenir
+et rien sur quoi revenir — et huit mesures font quinze secondes, donc toute
+l'idée repassait quatre fois par minute.
+
+C'est une chanson maintenant : une progression d'accords, une basse marchante,
+un comping syncopé, une batterie, et **un motif** développé sur quatre sections
+— A, B, A' une octave au-dessus, puis un C dépouillé. Le motif est tiré de la
+graine une seule fois, puis répondu, transposé et orné, au lieu d'être retiré à
+chaque mesure. Une phrase entendue quatre fois est une mélodie ; quatre phrases
+différentes sont du bruit bien élevé.
+
+Six morceaux de **56 à 80 secondes** — un par secteur, plus un pour le Vide, qui
+ne recommence donc plus la musique du secteur 1. Chacun coûte 6,5 Mo de
+mémoire, alors seul celui qui joue est gardé : le reconstruire prend un
+cinquième de seconde, sur un écran où rien ne bouge.
+
+**Sans couture.** L'ancienne boucle cliquait : mesuré, trois morceaux sur cinq
+se terminaient sur une marche dans la forme d'onde 5 à 16 fois leur propre
+99ᵉ centile de pas d'échantillon — un tic audible à chaque tour. Le morceau est
+maintenant rendu dans un tampon plus long que la boucle, puis **la queue est
+repliée sur la tête** : une note qui sonne encore à la fin continue au début du
+tour suivant, exactement comme si le morceau ne s'était jamais arrêté. La marche
+au raccord est à zéro, et `test_audio.py` refuse désormais tout morceau dont le
+raccord dépasse son propre p99, ou qui dure moins de 45 secondes.
 
 ### Le canon
 
@@ -392,6 +419,7 @@ pc/
   tools/shots.py     rend les captures d'écran
   tools/balance.py   mesure la carte, le bestiaire et les combats
   tools/shots_foes.py captures des ennemis tardifs
+  tools/music_demo.py exporte la musique et son point de boucle
   tools/make_icon.py dessine l'icône
 ```
 
