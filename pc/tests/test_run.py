@@ -163,6 +163,62 @@ def run_once(seed, players=1, difficulty=1):
             "fights": d.fights, "minutes": d.frames * DT / 60.0, "log": d.log}
 
 
+def test_pause():
+    """Escape freezes the fight and gives it back untouched.
+
+    The interesting half is not that the menu opens, it is that nothing moves
+    behind it. Pause is a flag over the existing screen rather than a state of
+    its own, which is what keeps the combat alive underneath -- and also what
+    makes it easy to leave one update path running by accident.
+    """
+    from nova.game import COMBAT, TITLE
+    g = Game(scale=1, crt=False, sound=False)
+    g.start_run(1)
+    g.run.seed = 3
+    g.run.rng = random.Random(3)
+    g.map = None
+    g.new_sector()
+    while g.state != COMBAT:                    # walk into the first fight
+        if g.state == MAP:
+            press(g, pygame.K_RETURN)
+        else:
+            press(g, pygame.K_RETURN)
+    for _ in range(240):                        # let the fight get going
+        g.update(DT)
+
+    press(g, pygame.K_ESCAPE)
+    assert g.paused, "escape did not pause"
+    before = (g.combat.time, len(g.combat.enemies), len(g.combat.shots),
+              g.run.hull, [(round(s.x, 3), round(s.y, 3))
+                           for s in g.combat.shots])
+    for _ in range(120):
+        g.update(DT)
+        g.draw()                                # drawing must be safe too
+    after = (g.combat.time, len(g.combat.enemies), len(g.combat.shots),
+             g.run.hull, [(round(s.x, 3), round(s.y, 3))
+                          for s in g.combat.shots])
+    assert before == after, "the fight moved while paused"
+
+    press(g, pygame.K_ESCAPE)
+    assert not g.paused, "escape did not resume"
+    for _ in range(60):
+        g.update(DT)
+    assert g.combat is None or g.combat.time > before[0], "the fight did not resume"
+
+    # abandoning goes back to the title, and the title cannot be paused
+    if g.state == COMBAT:
+        press(g, pygame.K_ESCAPE)
+        for _ in range(3):
+            press(g, pygame.K_DOWN)
+        press(g, pygame.K_RETURN)
+        assert g.state == TITLE, "abandon did not return to the title"
+        assert not g.paused
+    press(g, pygame.K_ESCAPE)
+    assert not g.paused, "the title screen must not pause"
+    print("  pause: freezes the fight, resumes it, abandons cleanly")
+    return True
+
+
 def test_boss_entrance():
     """A boss must not be damageable while it is holding fire.
 
@@ -257,6 +313,7 @@ def main():
 
     print()
     print("=== edge cases ===")
+    test_pause()
     test_boss_entrance()
     test_maxed_trader()
     print("  fully-upgraded ship: trader and salvage both handled")

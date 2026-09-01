@@ -54,6 +54,8 @@ class Game:
         self.difficulty = 1
         self.players = 1
         self.toast = None
+        self.paused = False
+        self.pause_menu = None
         self.enter_title()
         self.audio.music(0, 0)
 
@@ -126,6 +128,75 @@ class Game:
              data.DIFFICULTIES[self.difficulty][4],
              "Leave the void alone."],
             [data.CYAN, data.VIOLET, data.ORANGE, data.GREY])
+
+    # Pause is a flag rather than a state.
+    #
+    # Every other screen is a state, but pause is the one thing that has to
+    # happen *on top of* whatever is already there: a state would throw away
+    # the combat, the map or the shop underneath, and the whole point of
+    # pausing mid-fight is that the fight is still there when you come back.
+    def toggle_pause(self):
+        if self.state in (TITLE, GAMEOVER):
+            return                      # nothing to come back to
+        self.paused = not self.paused
+        if self.paused:
+            self.build_pause_menu()
+            self.audio.play("menu_ok", 0.6)
+        else:
+            self.audio.play("menu_move")
+
+    def build_pause_menu(self):
+        crt = "ON" if self.crt_on else "OFF"
+        self.pause_menu = ui.Menu(
+            ["RESUME", "SOUND   " + self.audio.mode_name, "CRT     " + crt,
+             "ABANDON RUN", "QUIT"],
+            ["Back to it.",
+             "M does this too, mid-fight.",
+             "Scanlines. F1 does this too.",
+             "Give up this run and go back to the title.",
+             "Close the game."],
+            [data.CYAN, data.WHITE, data.WHITE, data.ORANGE, data.GREY])
+
+    def pause_key(self, e):
+        before = self.pause_menu.index
+        choice = self.pause_menu.key(e)
+        if self.pause_menu.index != before:
+            self.audio.play("menu_move")
+        if choice is None:
+            return
+        if choice == 0:
+            self.toggle_pause()
+        elif choice == 1:
+            self.toast = [self.audio.cycle_mute(), 1.6]
+            if not self.audio.muted:
+                self.audio.music(self.run.sector if self.run else 0,
+                                 self.run.seed if self.run else 0)
+            self.build_pause_menu()
+        elif choice == 2:
+            self.crt_on = not self.crt_on
+            self.build_pause_menu()
+        elif choice == 3:
+            self.paused = False
+            self.run = None
+            self.combat = None
+            self.audio.play("menu_no")
+            self.enter_title()
+            self.audio.music(0, 0)
+        elif choice == 4:
+            self.running = False
+
+    def draw_pause(self, c):
+        """Dim what is underneath, then the panel. The game stays visible on
+        purpose: you paused to look at it."""
+        w, h = c.get_size()
+        veil = pygame.Surface((w, h), pygame.SRCALPHA)
+        veil.fill((0, 0, 0, 170))
+        c.blit(veil, (0, 0))
+        ui.text(c, self.art, "PAUSED", w // 2, data.TOP + 18, data.CYAN,
+                centre=True, big=True)
+        self.pause_menu.draw(c, self.art, data.TOP + 54, self.t)
+        ui.text(c, self.art, "ESC or START to resume", w // 2, h - 16,
+                data.DARK, centre=True)
 
     def start_run(self, players):
         self.players = players
@@ -339,6 +410,14 @@ class Game:
             return
         if e.type != pygame.KEYDOWN:
             return
+        if e.key == pygame.K_ESCAPE:
+            self.toggle_pause()
+            return
+        if self.paused:
+            # Nothing else gets a look in: F11 and the rest would otherwise
+            # fire straight through the panel.
+            self.pause_key(e)
+            return
         if e.key == pygame.K_F11 or (e.key == pygame.K_RETURN and
                                      (e.mod & pygame.KMOD_ALT)):
             self.toggle_fullscreen()
@@ -440,12 +519,28 @@ class Game:
         """Turn pad presses into the key events the menus already understand,
         so there is exactly one place that knows what a menu does."""
         for edge in self.pads.menu_edges():
-            key = {"up": pygame.K_UP, "down": pygame.K_DOWN,
-                   "confirm": pygame.K_RETURN, "back": pygame.K_BACKSPACE}[edge]
+            if edge == "start":
+                # Pause, except on the title where there is nothing to pause;
+                # there it is the confirm button people expect it to be.
+                key = (pygame.K_RETURN if self.state in (TITLE, GAMEOVER)
+                       else pygame.K_ESCAPE)
+            else:
+                key = {"up": pygame.K_UP, "down": pygame.K_DOWN,
+                       "confirm": pygame.K_RETURN,
+                       "back": pygame.K_BACKSPACE}[edge]
             self.handle_event(pygame.event.Event(pygame.KEYDOWN, key=key, mod=0))
 
     def update(self, dt):
         self.t += dt
+        if self.paused:
+            # The cursor still pulses and the toast still fades: a frozen menu
+            # looks like a crash. Nothing else advances.
+            if self.toast is not None:
+                self.toast[1] -= dt
+                if self.toast[1] <= 0:
+                    self.toast = None
+            self.pad_menu()
+            return
         self.flash.update(dt)
         if self.toast is not None:
             self.toast[1] -= dt
@@ -486,6 +581,9 @@ class Game:
             elif self.state == GAMEOVER:
                 self.draw_gameover(c)
 
+        if self.paused:
+            self.draw_pause(c)
+            ox = oy = 0
         if self.toast is not None:
             self.draw_toast(c)
 

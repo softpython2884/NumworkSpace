@@ -43,7 +43,7 @@ de riposter. La carte, elle, est un vrai choix — un atelier de réparation n'e
 proposé que dans 54 % des secteurs, sur une seule branche, jamais avant le boss.
 Zoom toujours entier, arène de taille fixe quelle que soit la résolution, et
 20 effets sonores synthétisés au démarrage (aucun fichier audio) —
-[à écouter](docs/nova-sound-demo.wav). Le tir étant automatique, `M` fait le
+[à écouter](docs/nova-sound-demo.wav). `Échap` met en pause. Le tir étant automatique, `M` fait le
 tour de trois réglages — tout, canon coupé, silence — parce que vouloir se
 passer du canon n'est pas vouloir se passer du son. Tout est dans
 [pc/README.md](pc/README.md).

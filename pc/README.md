@@ -49,8 +49,8 @@ construit sur Windows.
 | `--no-crt` | Coupe les scanlines |
 | `--no-sound` | Démarre en muet |
 
-En jeu : `F11` plein écran · `F1` filtre CRT · `M` son (3 crans) ·
-`+`/`-` taille · la fenêtre est redimensionnable à la souris.
+En jeu : `Échap` pause · `F11` plein écran · `F1` filtre CRT · `M` son
+(3 crans) · `+`/`-` taille · la fenêtre est redimensionnable à la souris.
 
 ## Résolutions
 
@@ -177,6 +177,24 @@ plutôt que de planter.
 | Tirer | automatique | automatique |
 | Bombe | `Espace` ou `Maj` | partagée |
 | Menus | flèches + `Entrée` | |
+| Pause | `Échap`, ou `Start` à la manette | |
+
+### La pause
+
+`Échap` ouvre un menu par-dessus ce qui est à l'écran : reprendre, le son, le
+filtre CRT, abandonner la partie, quitter. Le combat reste **visible sous le
+voile**, parce qu'on met en pause justement pour le regarder.
+
+C'est un drapeau, pas un état de la machine à états. Un état aurait jeté le
+combat, la carte ou la boutique en dessous, et tout l'intérêt de mettre en
+pause au milieu d'un combat est que le combat soit encore là au retour. En
+revanche c'est aussi la façon la plus facile de laisser tourner une boucle de
+mise à jour par mégarde, alors le test compare les positions de chaque
+projectile avant et après cent vingt images de pause.
+
+À la manette, `Start` n'est plus un second bouton de validation : il ouvre et
+ferme la pause, comme partout ailleurs — sauf sur l'écran-titre, où il n'y a
+rien à mettre en pause et où il valide.
 
 ### Manette
 

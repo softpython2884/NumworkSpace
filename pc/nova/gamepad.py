@@ -120,10 +120,15 @@ class Pads:
                 out.append("up")
             elif dy > 0:
                 out.append("down")
-        if (confirm and not prev[2]) or (start and not prev[4]):
+        if confirm and not prev[2]:
             out.append("confirm")
         elif back and not prev[3]:
             out.append("back")
+        if start and not prev[4]:
+            # Start is its own edge now rather than another confirm: it opens
+            # and closes the pause menu, which is what start does everywhere
+            # else, and the game decides what that means on the title screen.
+            out.append("start")
         self.prev[0] = (dx, dy, confirm, back, start)
         return out
 
