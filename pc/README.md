@@ -49,8 +49,8 @@ construit sur Windows.
 | `--no-crt` | Coupe les scanlines |
 | `--no-sound` | Démarre en muet |
 
-En jeu : `F11` plein écran · `F1` filtre CRT · `M` muet · `+`/`-` taille · la
-fenêtre est redimensionnable à la souris.
+En jeu : `F11` plein écran · `F1` filtre CRT · `M` son (3 crans) ·
+`+`/`-` taille · la fenêtre est redimensionnable à la souris.
 
 ## Résolutions
 
@@ -84,15 +84,16 @@ simplement pas de marges.
 ## Son
 
 Tout est **synthétisé au démarrage** — ondes carrées, triangles et bruit avec
-enveloppes, comme une NES. Aucun fichier audio dans le dépôt : 20 effets et
-cinq boucles de musique, construits en **0,04 seconde**.
+enveloppes, comme une NES. Aucun fichier audio dans le dépôt : 20 sons —
+24 échantillons, le canon en ayant trois — et cinq boucles de musique,
+construits en **0,03 seconde**.
 
 À écouter : [`docs/nova-sound-demo.wav`](../docs/nova-sound-demo.wav) — les
 20 effets puis un extrait de musique.
 
 | | |
 |---|---|
-| Armes | tir simple, tir large (3+ canons), tir ennemi |
+| Armes | tir simple et tir large (3+ canons), chacun en trois hauteurs, tir ennemi |
 | Impacts | touche, explosion, explosion de boss |
 | Vaisseau | dégât, déflecteur qui encaisse, déflecteur rechargé, bombe |
 | Butin | cristal, réparation |
@@ -102,8 +103,37 @@ cinq boucles de musique, construits en **0,04 seconde**.
 La musique change à chaque secteur : basse triangle et arpège carré, gamme et
 tempo propres à chacun, structure tirée de la graine de la partie.
 
-`M` coupe le son. Sans numpy, ou sur une machine sans carte son, le jeu
-démarre en silence plutôt que de planter.
+### Le canon
+
+Le tir est automatique : il sonne six à dix fois par seconde, pendant toute la
+partie. C'est le seul son du jeu qui se comporte comme une boucle, et deux
+choses le rendent fatigant — le volume, et la **répétition à l'identique**.
+
+Les deux sont traitées. Le canon est **14 dB plus discret** qu'avant (0,037×
+l'énergie par tir), ce qui le place sous tous les autres effets sauf l'impact,
+et il tourne sur **trois hauteurs** : tenir le tir ne rejoue jamais deux fois
+le même échantillon.
+
+| Effet | RMS |
+|---|---|
+| Alerte boss | 0,164 |
+| Explosion | 0,041 |
+| Tir ennemi | 0,042 |
+| **Tir joueur** | **0,016** |
+
+### `M` : trois crans, pas deux
+
+Vouloir couper le canon n'est pas vouloir le silence. `M` fait donc le tour :
+
+    SOUND ON  →  GUNS MUTED  →  SOUND OFF  →  SOUND ON
+
+`GUNS MUTED` ne touche **que** notre propre canon. Le tir ennemi, les impacts
+et l'alerte de boss restent : ce sont des informations, pas de la décoration —
+les couper rendrait le jeu plus difficile. L'état choisi s'affiche à l'écran,
+parce qu'on ne peut pas entendre la différence entre « moins » et « rien ».
+
+Sans numpy, ou sur une machine sans carte son, le jeu démarre en silence
+plutôt que de planter.
 
 ## Contrôles
 
@@ -234,7 +264,20 @@ et personne ne le remarque. Le test enregistre chaque son demandé pendant une
 partie et exige que les deux ensembles coïncident dans les deux sens ; un effet
 construit mais jamais déclenché est aussi une anomalie. Les sons rares
 (réparation, déflecteur, refus d'achat, fin de partie) sont provoqués
-explicitement, sinon le résultat dépendrait de la graine.
+explicitement, sinon le résultat dépendrait de la graine. Les noms de canon
+étant des alias — `play("shoot")` atteint l'une des trois variantes — la
+comparaison passe par `audio.gun_variants`, ce qui vérifie du même coup que la
+rotation les atteint **toutes**.
+
+Le même test exerce les trois crans de `M` : que `GUNS MUTED` fasse taire le
+canon, qu'il ne fasse taire *que* lui, et que `SOUND OFF` fasse taire le reste.
+Il vérifie aussi que deux tirs sur la même image ne donnent qu'un son — le
+cas de la coop, et le piège des variantes : si l'anti-répétition est indexée
+sur la variante choisie plutôt que sur le nom demandé, deux joueurs qui tirent
+ensemble tombent sur deux variantes différentes et le canon double de volume
+exactement là où il est déjà le plus présent. Les trois régressions (un cran
+qui ne coupe rien, une rotation qui saute une variante, l'anti-répétition mal
+indexée) ont été introduites volontairement pour vérifier que le test les voit.
 
 Mesures actuelles :
 
@@ -243,7 +286,7 @@ Mesures actuelles :
 | Taux de victoire (bot) | Cadet 7/8 · **Pilote 4/8** · As 1/8 |
 | Durée d'une partie gagnée | 9 à 11 min de combat |
 | Coût d'une image (p99) | **1,35 ms** sur un budget de 16,7 ms |
-| Construction des sons | 20 effets en **0,04 s** au démarrage |
+| Construction des sons | 24 échantillons en **0,03 s** au démarrage |
 
 Le pilote automatique a une information parfaite et des réflexes parfaits mais
 une stratégie naïve : un humain fera moins bien, ce qui est le bon sens de

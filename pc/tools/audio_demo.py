@@ -18,8 +18,10 @@ pygame.display.set_mode((64, 64))
 
 from nova import audio as A
 
+# Repeat counts are chosen so the guns run through a full rotation of their
+# pitch variants -- hearing them in isolation is the point of the file.
 ORDER = [
-    ("shoot", 3), ("shoot_big", 2), ("enemy_shoot", 3), ("hit", 4),
+    ("shoot", 6), ("shoot_big", 3), ("enemy_shoot", 3), ("hit", 4),
     ("crystal", 3), ("repair", 1), ("explode", 2), ("explode_big", 1),
     ("shield_up", 1), ("shield_break", 1), ("hurt", 1), ("bomb", 1),
     ("menu_move", 3), ("menu_ok", 1), ("menu_no", 1), ("buy", 1),
@@ -36,11 +38,12 @@ def main():
     gap = np.zeros(int(A.RATE * 0.16), dtype=np.int16)
     chunks = []
     for name, times in ORDER:
-        snd = engine.effects[name]
-        arr = pygame.sndarray.array(snd)
-        mono = arr[:, 0].astype(np.int16)
-        for _ in range(times):
-            chunks.append(mono)
+        # gun names are aliases for a set of variants; play them in turn, the
+        # way the engine does
+        variants = A.gun_variants(name)
+        for i in range(times):
+            arr = pygame.sndarray.array(engine.effects[variants[i % len(variants)]])
+            chunks.append(arr[:, 0].astype(np.int16))
             chunks.append(gap[:int(A.RATE * 0.07)])
         chunks.append(gap)
 

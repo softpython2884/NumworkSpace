@@ -4,6 +4,10 @@ A misspelled effect name is silent, not an error -- `play("expode")` simply
 does nothing, forever, and nobody notices. So: play a whole run, record every
 name requested, and require the two sets to match in both directions. Unused
 entries matter too: they are sounds somebody wrote and forgot to trigger.
+
+Gun names are aliases -- `play("shoot")` reaches one of three pitch variants --
+so a request is expanded through `audio.gun_variants` before the sets are
+compared, and the mute modes are exercised directly at the end.
 """
 
 import os
@@ -78,6 +82,87 @@ def rare_paths(audio):
 EXPECT_UNPLAYED = set()
 
 
+class Tapped(dict):
+    """A catalogue that remembers every lookup, so a test can see which sample
+    `play` actually reached for rather than which name it was handed."""
+
+    def __init__(self, src):
+        dict.__init__(self, src)
+        self.hits = []
+
+    def get(self, key, default=None):
+        self.hits.append(key)
+        return dict.get(self, key, default)
+
+
+def mute_modes(a):
+    """M has to mute the guns *only*, then everything. Check all three states
+    through `play` itself, since that is where the early returns live.
+
+    Returns a list of failure messages.
+    """
+    bad = []
+    real, a.effects = a.effects, Tapped(a.effects)
+    try:
+        a.mode = a.ALL
+        a._gun_turn = 0
+        for _ in range(audio_mod.GUN_VARIANTS * 2):
+            a.play("shoot")
+        a.play("explode")
+        seen = set(a.effects.hits)
+        want = set(audio_mod.gun_variants("shoot"))
+        if not want <= seen:
+            bad.append("rotation never reaches %s" % ", ".join(sorted(want - seen)))
+        if "explode" not in seen:
+            bad.append("sound on: explode did not play")
+
+        a.effects.hits = []
+        a.mode = a.NO_GUNS
+        for name in audio_mod.GUN_SOUNDS:
+            a.play(name)
+        if a.effects.hits:
+            bad.append("guns muted: %s still played"
+                       % ", ".join(sorted(set(a.effects.hits))))
+        for name in ("explode", "enemy_shoot", "hit", "pickup"):
+            a.play(name)
+        missed = [n for n in ("explode", "enemy_shoot", "hit")
+                  if n not in a.effects.hits]
+        if missed:
+            bad.append("guns muted: it silenced %s too" % ", ".join(missed))
+
+        a.effects.hits = []
+        a.mode = a.OFF
+        for name in ("shoot", "explode", "enemy_shoot"):
+            a.play(name)
+        if a.effects.hits:
+            bad.append("sound off: %s still played"
+                       % ", ".join(sorted(set(a.effects.hits))))
+    finally:
+        a.effects = real
+        a.mode = a.ALL
+        a._gun_turn = 0
+
+    # two players firing on the same frame must collapse to one sound: the
+    # throttle has to key on the requested name, not on the variant chosen
+    real, a.effects = a.effects, Tapped(a.effects)
+    try:
+        a.play("shoot", throttle=0.5)
+        a.play("shoot", throttle=0.5)
+        if len(a.effects.hits) != 1:
+            bad.append("throttle let %d gun sounds through instead of 1 (%s)"
+                       % (len(a.effects.hits), ", ".join(a.effects.hits)))
+    finally:
+        a.effects = real
+        a._last.clear()
+
+    # and the key itself walks the three states in order and comes back round
+    labels = [a.cycle_mute() for _ in range(4)]
+    if labels != list(a.MODE_NAMES[1:]) + [a.MODE_NAMES[0], a.MODE_NAMES[1]]:
+        bad.append("M does not cycle on -> guns -> off -> on: %s" % labels)
+    a.mode = a.ALL
+    return bad
+
+
 def main():
     pygame.init()
     a = audio_mod.Audio(True)
@@ -109,8 +194,13 @@ def main():
         audio_mod.Audio.play = real_play
 
     have = set(a.effects)
-    missing = asked - have
-    unused = have - asked - EXPECT_UNPLAYED
+    # a request for "shoot" can land on any of its variants, so every variant
+    # counts as reached -- and all of them must exist
+    reachable = set()
+    for name in asked:
+        reachable.update(audio_mod.gun_variants(name))
+    missing = reachable - have
+    unused = have - reachable - EXPECT_UNPLAYED
     absent = EXPECT_UNPLAYED - have
 
     print("effects requested during play : %d" % len(asked))
@@ -127,6 +217,11 @@ def main():
         print("FAIL: expected-but-unplayed sounds are missing: %s"
               % ", ".join(sorted(absent)))
         ok = False
+
+    for problem in mute_modes(a):
+        print("FAIL: %s" % problem)
+        ok = False
+    print("mute modes      : %s" % " -> ".join(a.MODE_NAMES))
 
     # music: one track per sector, and they must differ
     lengths = []

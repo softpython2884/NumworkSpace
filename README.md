@@ -36,7 +36,9 @@ manette), **cinq boss** aux mécaniques distinctes — rayons, escortes, modules
 destructibles.
 Zoom toujours entier, arène de taille fixe quelle que soit la résolution, et
 20 effets sonores synthétisés au démarrage (aucun fichier audio) —
-[à écouter](docs/nova-sound-demo.wav). Tout est dans
+[à écouter](docs/nova-sound-demo.wav). Le tir étant automatique, `M` fait le
+tour de trois réglages — tout, canon coupé, silence — parce que vouloir se
+passer du canon n'est pas vouloir se passer du son. Tout est dans
 [pc/README.md](pc/README.md).
 
 ## Édition NumWorks

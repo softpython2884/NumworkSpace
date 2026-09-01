@@ -19,6 +19,12 @@ def text(surf, art, msg, x, y, colour=data.WHITE, centre=False, right=False,
     return img
 
 
+def text_width(art, msg, big=False):
+    """Width the same call to `text` would occupy, for centring a box round it."""
+    font = art.font_big if big else art.font
+    return font.size(msg)[0]
+
+
 class Menu:
     """A vertical list with a cursor and a help line under the selection.
 
@@ -109,4 +115,3 @@ def draw_hud(surf, art, run, tag, boss=None):
             px = x0 + bar_w + 6 + i * 8
             pygame.draw.rect(surf, data.BLUE if pod.alive else data.DARK,
                              (px, y0 - 1, 6, 6), 0 if pod.alive else 1)
-

@@ -128,6 +128,25 @@ def _to_sound(wave, volume=1.0):
     return pygame.sndarray.make_sound(_np.ascontiguousarray(stereo))
 
 
+# The player's own weapon. Enemy fire and impacts are information -- they tell
+# you what is about to hurt you -- so they are never part of the gun mute.
+GUN_SOUNDS = ("shoot", "shoot_big")
+GUN_VARIANTS = 3
+
+
+def gun_variants(name):
+    """The concrete effect names a requested name can resolve to.
+
+    `play("shoot")` never plays a sample called `shoot`: guns rotate through
+    pitch variants, so the name is an alias for three of them. Everything else
+    is its own single name. The catalogue test uses this to know that a
+    request and a built sound line up.
+    """
+    if name in GUN_SOUNDS:
+        return tuple("%s%d" % (name, i) for i in range(GUN_VARIANTS))
+    return (name,)
+
+
 def build_effects():
     """The whole sound catalogue. Each entry is a couple of lines of synthesis;
     that legibility is the point of generating them rather than shipping WAVs."""
@@ -135,17 +154,31 @@ def build_effects():
     fx = {}
 
     # --- guns ------------------------------------------------------------
-    fx["shoot"] = _to_sound(S.env(S.sweep(880, 420, 0.07, duty=0.25),
-                                  attack=0.001, curve=2.5), 0.30)
-    fx["shoot_big"] = _to_sound(S.env(S.sweep(520, 200, 0.11, duty=0.35),
-                                      attack=0.001, curve=2.0), 0.34)
+    # Fire is automatic, so this plays five to ten times a second for as long
+    # as the game is on. It has to be quiet, short, and never twice the same:
+    # a repeated identical blip is what turns a shooter into a headache. Three
+    # pitch variants are cycled, and the whole thing is well below the volume
+    # of anything that only happens occasionally.
+    small = ((760, 380), (820, 410), (700, 350))
+    big = ((470, 200), (510, 215), (440, 185))
+    assert len(small) == len(big) == GUN_VARIANTS, \
+        "the rotation in Audio.resolve would never reach the extra variants"
+    for i, (f0, f1) in enumerate(small):
+        fx["shoot%d" % i] = _to_sound(
+            S.env(S.lowpass(S.sweep(f0, f1, 0.045, duty=0.22), 0.55),
+                  attack=0.001, curve=3.2), 0.085)
+    for i, (f0, f1) in enumerate(big):
+        fx["shoot_big%d" % i] = _to_sound(
+            S.env(S.lowpass(S.sweep(f0, f1, 0.065, duty=0.3), 0.5),
+                  attack=0.001, curve=2.6), 0.10)
     fx["enemy_shoot"] = _to_sound(S.env(S.sweep(300, 170, 0.10, duty=0.5),
-                                        attack=0.002, curve=2.0), 0.20)
+                                        attack=0.002, curve=2.0), 0.17)
 
     # --- impacts ---------------------------------------------------------
+    # also frequent, so also quiet
     fx["hit"] = _to_sound(S.env(S.mix(S.noise(0.045, 1) * 0.6,
                                       S.square(1400, 0.045, 0.15) * 0.4),
-                                attack=0.001, curve=4.0), 0.22)
+                                attack=0.001, curve=4.0), 0.13)
     fx["explode"] = _to_sound(
         S.env(S.mix(S.lowpass(S.noise(0.34, 2), 0.30),
                     S.sweep(320, 60, 0.34, kind="saw") * 0.5),
@@ -271,11 +304,19 @@ class Audio:
 
     Every entry point is a no-op when sound is off, so callers never have to
     guard their calls.
+
+    Mute has three settings rather than two. Automatic fire means the gun plays
+    for as long as the game is running, and wanting that gone is not the same
+    as wanting silence -- so M steps through everything, guns off, all off.
     """
+
+    ALL, NO_GUNS, OFF = range(3)
+    MODE_NAMES = ("SOUND ON", "GUNS MUTED", "SOUND OFF")
 
     def __init__(self, enabled=True):
         self.ok = False
-        self.muted = not enabled
+        self.mode = self.ALL if enabled else self.OFF
+        self._gun_turn = 0
         self.effects = {}
         self.tracks = {}
         self.music_channel = None
@@ -302,26 +343,50 @@ class Audio:
             # A machine with no audio device should still play the game.
             self.ok = False
 
+    @property
+    def muted(self):
+        return self.mode == self.OFF
+
+    def resolve(self, name):
+        """Which sample a requested name actually plays, or None if muted.
+
+        Guns step to the next pitch variant every time, so holding fire never
+        repeats one sample; that repetition, more than the volume, is what
+        makes an automatic weapon tiring to listen to.
+        """
+        if name in GUN_SOUNDS:
+            if self.mode == self.NO_GUNS:
+                return None
+            self._gun_turn = (self._gun_turn + 1) % GUN_VARIANTS
+            return "%s%d" % (name, self._gun_turn)
+        return name
+
     def play(self, name, volume=1.0, throttle=0.0):
         """Fire one effect. `throttle` suppresses repeats within N seconds,
         which keeps a wall of simultaneous explosions from turning to mush."""
-        if not self.ok or self.muted:
+        if not self.ok or self.mode == self.OFF:
             return
-        snd = self.effects.get(name)
-        if snd is None:
-            return
+        # Throttle on the name asked for, not the variant it resolves to: two
+        # players firing on the same frame must still collapse to one sound,
+        # and they would land on different variants.
         if throttle:
             now = pygame.time.get_ticks() / 1000.0
             if now - self._last.get(name, -99.0) < throttle:
                 return
             self._last[name] = now
+        sample = self.resolve(name)
+        if sample is None:
+            return
+        snd = self.effects.get(sample)
+        if snd is None:
+            return
         ch = pygame.mixer.find_channel(True)
         if ch is not None and ch is not self.music_channel:
             ch.set_volume(volume)
             ch.play(snd)
 
     def music(self, sector, seed=0):
-        if not self.ok or self.muted:
+        if not self.ok or self.mode == self.OFF:
             return
         key = (sector % len(SECTOR_TRACKS), seed)
         if self.current_track == key and self.music_channel.get_busy():
@@ -339,8 +404,13 @@ class Audio:
             self.music_channel.stop()
             self.current_track = None
 
-    def toggle_mute(self):
-        self.muted = not self.muted
-        if self.muted:
+    def cycle_mute(self):
+        """Step: everything -> guns off -> all off. Returns the new label."""
+        self.mode = (self.mode + 1) % 3
+        if self.mode == self.OFF:
             self.stop_music()
-        return self.muted
+        return self.MODE_NAMES[self.mode]
+
+    @property
+    def mode_name(self):
+        return self.MODE_NAMES[self.mode]

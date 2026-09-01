@@ -53,6 +53,7 @@ class Game:
         self.flash = Flash()
         self.difficulty = 1
         self.players = 1
+        self.toast = None
         self.enter_title()
         self.audio.music(0, 0)
 
@@ -336,9 +337,14 @@ class Game:
             self.crt_on = not self.crt_on
             return
         if e.key == pygame.K_m:
-            self.audio.toggle_mute()
-            if not self.audio.muted and self.run is not None:
-                self.audio.music(self.run.sector, self.run.seed)
+            # three steps, not two: automatic fire means the gun is the one
+            # sound you might want gone while keeping everything else
+            self.toast = [self.audio.cycle_mute(), 1.6]
+            if not self.audio.muted:
+                if self.run is None:
+                    self.audio.music(0, 0)
+                else:
+                    self.audio.music(self.run.sector, self.run.seed)
             return
         if e.key in (pygame.K_KP_PLUS, pygame.K_EQUALS):
             self.set_scale(self.scale + 1)
@@ -431,6 +437,10 @@ class Game:
     def update(self, dt):
         self.t += dt
         self.flash.update(dt)
+        if self.toast is not None:
+            self.toast[1] -= dt
+            if self.toast[1] <= 0:
+                self.toast = None
         if self.state != COMBAT:
             self.pad_menu()
         if self.state == COMBAT:
@@ -466,6 +476,9 @@ class Game:
             elif self.state == GAMEOVER:
                 self.draw_gameover(c)
 
+        if self.toast is not None:
+            self.draw_toast(c)
+
         w, h = c.get_size()
         frame = pygame.transform.scale(c, (w * self.scale, h * self.scale))
         self.screen.fill((0, 0, 0))
@@ -474,6 +487,20 @@ class Game:
         if self.crt_on:
             self.screen.blit(self.crt, self.offset)
         pygame.display.flip()
+
+    def draw_toast(self, c):
+        """A short label for a setting that was just changed. Without it,
+        cycling mute is guesswork -- you cannot hear which state you landed in
+        when the answer is "less"."""
+        label, life = self.toast
+        y = data.TOP + 8
+        w = ui.text_width(self.art, label) + 16
+        x = (data.W - w) // 2
+        band = pygame.Surface((w, 18), pygame.SRCALPHA)
+        band.fill((0, 0, 0, int(200 * min(1.0, life / 0.4))))
+        c.blit(band, (x, y))
+        pygame.draw.rect(c, data.CYAN, (x, y, w, 18), 1)
+        ui.text(c, self.art, label, data.W // 2, y + 2, data.CYAN, centre=True)
 
     def draw_title(self, c):
         c.fill(data.VOID)
@@ -487,7 +514,7 @@ class Game:
         # 138 keeps the menu's own hint line clear of the shortcut line below
         self.menu.draw(c, self.art, 138, self.t)
         ui.text(c, self.art,
-                "F11 fullscreen   F1 CRT   M mute   +/- size",
+                "F11 fullscreen   F1 CRT   M sound   +/- size",
                 data.W // 2, data.H - 14, data.DARK, centre=True)
         if self.pads.count:
             label = "%d gamepad%s ready" % (self.pads.count,
