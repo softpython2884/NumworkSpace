@@ -186,6 +186,36 @@ hit-stop sur les dégâts, filtre CRT optionnel.
 | ![Marchand](../docs/img/pc-05-trader.png) | ![CRT](../docs/img/pc-03-fight-crt.png) |
 | Le marchand dit ce qu'il vend | Le filtre CRT, `F1` |
 
+## Le bestiaire
+
+Il grandit jusqu'au bout. Avant, c'était `min(2 + secteur, 5)` : tout était
+débloqué dès le secteur 3, donc les secteurs 4 et 5 n'introduisaient plus rien
+et le dernier tiers d'une partie n'était que le premier tiers avec des nombres
+plus gros.
+
+```
+secteur 1  GRUNT, WEAVER      secteur 4  + TANK
+secteur 2  + RUSHER           secteur 5  + SPINNER
+secteur 3  + TURRET, LANCER   le Vide    + PHANTOM
+```
+
+Les trois derniers prennent chacun une mécanique à un boss et la boulonnent sur
+quelque chose de mortel. C'est tout l'intérêt : un boss t'apprend une attaque
+une fois, puis l'attaque revient sur un vaisseau que tu peux abattre.
+
+![Les ennemis tardifs](../docs/img/pc-foes.png)
+
+| | |
+|---|---|
+| **LANCER** | Le **rayon** de LANCE. Il vise, charge 0,85 s, tire. Le rayon reste verrouillé là où il visait — et le tuer pendant la charge emporte le rayon avec lui. Une priorité de cible, pas une fatalité. |
+| **SPINNER** | Les anneaux de SENTINEL. Le seul ennemi du bestiaire qui ne se soucie pas d'où tu es, ce qui le rend gênant à côté de tous ceux qui te visent. |
+| **PHANTOM** | Le Vide seulement. **Dash arrière et latéral**, déclenché par le fait que tu sois aligné dessous — donc se garer en dessous et tenir la gâchette, ce que la cadence de tir du Vide t'a appris à faire, est exactement ce qui échoue. |
+
+La densité aussi : le budget passe de `+10` à `+13` par secteur, plafond de 104
+à 150. Mais le vrai frein était ailleurs — un **plafond fixe de 14 ennemis
+simultanés**, inchangé depuis le secteur 1. Il monte maintenant avec le secteur,
+jusqu'à 20.
+
 ## Les boss
 
 Le premier jet PC avait un seul boss reskinné par secteur : le combat censé
@@ -360,7 +390,8 @@ pc/
   nova.spec          recette PyInstaller
   tests/             suite headless
   tools/shots.py     rend les captures d'écran
-  tools/balance.py   mesure la carte et les combats
+  tools/balance.py   mesure la carte, le bestiaire et les combats
+  tools/shots_foes.py captures des ennemis tardifs
   tools/make_icon.py dessine l'icône
 ```
 
@@ -477,24 +508,26 @@ publiés mesuraient du bruit) :
 
 | | |
 |---|---|
-| Taux de victoire (bot) | Cadet 13/24 · **Pilote 14/24** · As 6/24 |
-| Dégâts pris par boss | **5,4** points de coque (0,6 avant) |
-| Combats de boss sans une égratignure | **15 %** (57 % avant) |
-| Durée d'un combat de boss | **49 s** (30 s avant) |
-| Durée d'une partie gagnée | 12 à 13 min de combat |
-| Coût d'une image (p99) | **1,11 ms** sur un budget de 16,7 ms |
-| Pire cas mesuré | WARDEN phase 3 en coop, **103 projectiles** à l'écran |
+| Taux de victoire (bot) | Cadet 18/24 · **Pilote 12/24** · As 3/24 |
+| Coque à l'entrée du boss | **75 %** de la barre (89 % avant) |
+| Dégâts pris par boss | **3,6** points de coque (0,6 avant) |
+| Combats de boss sans une égratignure | **17 %** (57 % avant) |
+| Durée d'un combat de boss | **45 s** (30 s avant) |
+| Durée d'une partie gagnée | 13 à 16 min de combat |
+| Coût d'une image (p99) | **1,76 ms** sur un budget de 16,7 ms |
+| Pire cas mesuré | WARDEN phase 3 en coop, **305 entités** à l'écran |
 | Construction des sons | 24 échantillons en **0,03 s** au démarrage |
 
-**Cadet et Pilote sont à égalité, et il ne faut pas le corriger.** 13 contre 14
-sur 24 graines, c'est un écart d'une partie, largement dans le bruit — mais
-c'est surtout la limite de l'instrument. Ce que Cadet donne, c'est 33 % de coque
-en plus et un tir adverse 35 % plus lent ; or ce pilote se fait très peu toucher,
-donc il ne dépense presque jamais cette coque supplémentaire. Un humain, qui
-encaisse bien davantage, sent la différence que le robot ne peut pas mesurer.
-Régler les niveaux jusqu'à ce que la courbe soit jolie **pour le robot**
-reviendrait à les régler contre le joueur. As, lui, se détache nettement (6/24),
-parce que la cadence de tir touche tout le monde de la même façon.
+L'échelle est monotone — 75 %, 50 %, 13 % — et elle ne l'a été qu'à partir du
+moment où les secteurs tardifs ont eu de quoi remplir l'écran. Avant, Cadet et
+Pilote finissaient à égalité (13 contre 14) : ce que Cadet donne, c'est surtout
+de la coque en plus, et un pilote qui se fait peu toucher ne la dépense jamais.
+Des combats plus denses lui donnent enfin quelque chose à en faire.
+
+**La coque à l'entrée du boss est passée de 89 % à 75 %**, et c'est le chiffre
+qui répond vraiment à « on arrive toujours au boss à pleine vie ». Rendre les
+ateliers rares n'y suffisait pas : encore fallait-il que le chemin coûte quelque
+chose.
 
 Et boss par boss, au niveau Pilote — c'est le tableau qui a servi à régler la
 difficulté, parce qu'une moyenne sur cinq boss cache exactement ce qu'on veut
@@ -503,10 +536,13 @@ savoir : est-ce que le *premier* boss rencontré est un combat ou une formalité
 | Boss | Dégâts pris | Durée | Sans une égratignure |
 |---|---:|---:|---:|
 | S1 SENTINEL | 2,2 | 31 s | 12 % |
-| S2 HIVE MOTHER | 7,6 | 67 s | 17 % |
-| S3 LANCE | 3,4 | 43 s | 19 % |
-| S4 BULWARK | 4,1 | 47 s | 27 % |
-| S5 WARDEN | 10,2 | 59 s | **0 %** |
+| S2 HIVE MOTHER | 3,3 | 56 s | 33 % |
+| S3 LANCE | 3,5 | 44 s | 5 % |
+| S4 BULWARK | 3,9 | 47 s | 24 % |
+| S5 WARDEN | 6,1 | 49 s | 7 % |
+
+2,2 → 3,3 → 3,5 → 3,9 → 6,1 : une rampe propre, ce qu'aucune des passes
+précédentes n'avait obtenu.
 
 HIVE MOTHER, le boss du secteur 2, mesurait **1,0 point de dégâts et la moitié
 de ses combats sans une égratignure** avant cette passe — de loin le plus faible

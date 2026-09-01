@@ -19,8 +19,10 @@ art.load_fonts()
 ZOOM = 5
 items = [("player 1", art.players[0]), ("player 2", art.players[1]),
          ("crystal", art.crystal), ("repair", art.repair)]
-names = ("grunt", "weaver", "turret", "rusher", "tank")
-for i, n in enumerate(names):
+for i, n in ((data.GRUNT_ID, "grunt"), (data.WEAVER_ID, "weaver"),
+             (data.TURRET_ID, "turret"), (data.RUSHER_ID, "rusher"),
+             (data.TANK_ID, "tank"), (data.LANCER_ID, "lancer"),
+             (data.SPINNER_ID, "spinner"), (data.PHANTOM_ID, "phantom")):
     items.append((n, art.enemy_surface(2, i)))
 items.append(("pod", art.pod))
 for i, n in enumerate(data.BOSS_NAME):

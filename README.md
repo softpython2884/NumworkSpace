@@ -34,7 +34,10 @@ le jeu. `pc/build_exe.cmd` en fait un `.exe` autonome avec icône.
 Déplacement 8 directions, tir automatique, coop 2 joueurs (clavier et/ou
 manette), **cinq boss** aux mécaniques distinctes — murs à un seul trou,
 spirales, peignes de rayons, escortes, modules destructibles et canons sur les
-murs de l'arène. Les motifs sont denses mais jamais aléatoires : ils sont faits
+murs de l'arène. Le bestiaire grandit jusqu'au bout, un nouveau type par
+secteur, et les trois derniers reprennent chacun une mécanique de boss sur un
+vaisseau que tu peux abattre : un **rayon**, des anneaux, et dans le Vide un
+chasseur qui **esquive en dash** dès que tu te places sous lui. Les motifs sont denses mais jamais aléatoires : ils sont faits
 pour être lus, et chaque boss ménage une **fenêtre** où tout se tait, le temps
 de riposter. La carte, elle, est un vrai choix — un atelier de réparation n'est
 proposé que dans 54 % des secteurs, sur une seule branche, jamais avant le boss.
