@@ -20,6 +20,7 @@ the calculator's 32-bit ARM. Object-heavy structures -- the parse tree above all
 """
 
 import os
+import shutil
 import subprocess
 import sys
 
@@ -34,19 +35,30 @@ BUDGET_K = 48
 
 
 def probe(heap_k, entry, workdir):
-    src = ("import kandinsky, ion, time, gc, sys\n"
-           "sys.path.insert(0, %r)\n"
+    """Import `entry` on a heap of exactly `heap_k` KB. Returns None if it did
+    not fit.
+
+    Nothing here mentions an absolute path. An earlier version inserted the
+    work directory into sys.path, which made the answer depend on how deep the
+    checkout sat: the longer string shifted the baseline by a couple of hundred
+    bytes, that pushed a parse allocation over a chunk boundary, and the
+    reported minimum jumped 3 KB. Same game, different number, depending on the
+    machine. The interpreter runs with the work directory as its own cwd
+    instead, and MicroPython's default sys.path already starts with '', so the
+    modules and the stubs are found with no path string at all.
+    """
+    src = ("import kandinsky, ion, time, gc\n"
            "gc.collect()\n"
            "b = gc.mem_free()\n"
            "import %s\n"
            "gc.collect()\n"
-           "print('OK', b - gc.mem_free(), gc.mem_free())\n" % (workdir, entry))
-    path = os.path.join(STUBS, "_probe.py")
+           "print('OK', b - gc.mem_free(), gc.mem_free())\n" % entry)
+    path = os.path.join(workdir, "_probe.py")
     with open(path, "w") as fh:
         fh.write(src)
     try:
         r = subprocess.run([MP, "-X", "heapsize=%dk" % heap_k, "_probe.py"],
-                           capture_output=True, text=True, cwd=STUBS, timeout=90)
+                           capture_output=True, text=True, cwd=workdir, timeout=90)
     except subprocess.TimeoutExpired:
         return None
     if r.stdout.startswith("OK"):
@@ -96,11 +108,15 @@ def main(argv):
     workdir = os.path.join(ROOT, "tools", "mp", "work")
     os.makedirs(workdir, exist_ok=True)
 
-    # Every dist/*.py module must be importable, so stage them all.
+    # Every dist/*.py module must be importable, so stage them all -- and the
+    # kandinsky/ion stubs beside them, since the probe imports by cwd alone.
     dist = os.path.join(ROOT, "dist")
     for f in sorted(os.listdir(dist)):
         if f.endswith(".py"):
             prepare(os.path.join(dist, f), workdir)
+    for f in sorted(os.listdir(STUBS)):
+        if f.endswith(".py") and not f.startswith("_"):
+            shutil.copyfile(os.path.join(STUBS, f), os.path.join(workdir, f))
 
     print("%-22s %8s %10s %10s %8s" %
           ("module", "bytes", "min heap", "resident", "verdict"))

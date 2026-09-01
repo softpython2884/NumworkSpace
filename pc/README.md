@@ -117,8 +117,8 @@ le même échantillon.
 | Effet | RMS |
 |---|---|
 | Alerte boss | 0,164 |
-| Explosion | 0,041 |
 | Tir ennemi | 0,042 |
+| Explosion | 0,041 |
 | **Tir joueur** | **0,016** |
 
 ### `M` : trois crans, pas deux

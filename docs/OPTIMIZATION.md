@@ -41,6 +41,17 @@ que personne le remarque. Epsilon n'embarque ni l'un ni l'autre, alors le build
 les désactive : la compilation passe de « à réparer à la main » à quinze
 secondes, et la mesure tourne à chaque commit.
 
+Et une fois qu'elle a tourné, elle a annoncé **50 Ko** là où la même commande
+en annonçait 47 sur cette machine. Le jeu n'y était pour rien : la sonde
+insérait le dossier de travail dans `sys.path`, en absolu. Sur un runner GitHub
+ce chemin est plus long ; quelques centaines d'octets de plus au départ, une
+allocation de l'analyseur qui franchit une frontière de bloc, et le minimum
+mesuré saute de 3 Ko. Un banc de mesure dont la réponse dépend de l'endroit où
+le dépôt est cloné ne mesure pas le programme. La sonde tourne désormais avec
+le dossier de travail pour répertoire courant — `sys.path` de MicroPython
+commence déjà par `''` — et ne manipule plus aucun chemin : 47 Ko, quelle que
+soit la profondeur du clone.
+
 Le build local est en 64 bits, donc ses pointeurs sont deux fois plus larges que
 ceux du ARM 32 bits de la calculatrice ; l'arbre syntaxique, qui est presque
 entièrement fait de pointeurs, coûte environ 1,6 fois plus ici. Le budget de
