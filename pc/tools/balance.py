@@ -158,6 +158,18 @@ def main(argv):
     print("  traders per sector        : %.2f" % m["shop_per_map"])
     print("  every route crosses one   : %.0f%%" % m["forced_shop"])
 
+    names = ("GRUNT", "WEAVER", "TURRET", "RUSHER", "TANK", "BOSS",
+             "LANCER", "SPINNER", "PHANTOM")
+    print("\n=== the roster, sector by sector ===")
+    seen = set()
+    for sec in range(7):
+        kinds = set(data.roster(sec))
+        fresh = sorted(kinds - seen)
+        seen = kinds
+        print("  %-8s %2d kinds   new: %s"
+              % ("VOID %d" % (sec - 4) if sec > 4 else "sector %d" % (sec + 1),
+                 len(kinds), ", ".join(names[k] for k in fresh) or "-"))
+
     print("\n=== fights (%d seeds per tier) ===" % len(seeds))
     print("%-7s %6s %8s %9s %8s %10s %8s" %
           ("tier", "won", "boss hp", "dmg taken", "no dmg", "boss secs",

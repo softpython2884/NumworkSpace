@@ -56,6 +56,64 @@ class EnemyBullet:
                 and data.PLAY_L - 20 < self.x < data.PLAY_R + 20)
 
 
+class EnemyBeam:
+    """A lancer's beam: LANCE's mechanic, bolted to something you can kill.
+
+    Same contract as the boss's -- it locks where it aimed when the charge
+    began, so it is always dodgeable and never arbitrary -- but it hangs off a
+    mortal ship. Kill the lancer mid-charge and the beam goes with it, which is
+    the whole reason for putting a boss attack on a regular enemy: it turns
+    into a target priority instead of a weather condition.
+    """
+
+    CHARGE = 0.85
+    FIRE = 0.5
+    FADE = 0.2
+    WIDTH = 9
+
+    __slots__ = ("x", "y", "t")
+
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.t = 0.0
+
+    def update(self, dt):
+        self.t += dt
+
+    @property
+    def firing(self):
+        return self.CHARGE <= self.t < self.CHARGE + self.FIRE
+
+    @property
+    def done(self):
+        return self.t >= self.CHARGE + self.FIRE + self.FADE
+
+    def rect(self):
+        half = self.WIDTH / 2
+        return (self.x - half, self.y, self.WIDTH, data.BOT - self.y)
+
+    def draw(self, surf):
+        top = int(self.y)
+        h = data.BOT - top
+        if h <= 0:
+            return
+        if self.t < self.CHARGE:
+            frac = self.t / self.CHARGE
+            if int(self.t * (7 + 20 * frac)) % 2:
+                w = max(1, int(1 + frac * 3))
+                surf.fill(data.ORANGE, (int(self.x - w / 2), top, w, h))
+            return
+        if self.firing:
+            w = self.WIDTH
+            surf.fill(data.ORANGE, (int(self.x - w / 2), top, w, h))
+            surf.fill(data.WHITE, (int(self.x - 2), top, 4, h))
+            return
+        frac = 1.0 - (self.t - self.CHARGE - self.FIRE) / self.FADE
+        w = max(1, int(self.WIDTH * frac * 0.5))
+        surf.fill(data.ORANGE, (int(self.x - w / 2), top, w, h))
+
+
 class Pickup:
     """Crystals and hull patches, back from the calculator's cutting-room floor."""
 
@@ -184,7 +242,8 @@ SPREADS = (
 
 class Enemy:
     __slots__ = ("x", "y", "kind", "hp", "max_hp", "t", "fire_t", "anchor",
-                 "drift", "w", "h", "flash", "phase", "score", "rng")
+                 "drift", "w", "h", "flash", "phase", "score", "rng",
+                 "beam", "dash_t", "dash_vx", "dash_vy")
 
     def __init__(self, kind, x, y, hp, sector, rng=None):
         self.kind = kind
@@ -202,6 +261,10 @@ class Enemy:
         self.phase = 0
         self.score = data.ENEMY_SCORE[kind]
         self.w, self.h = ENEMY_SIZE[kind]
+        self.beam = None                 # lancers only
+        self.dash_t = 0.0                # phantoms only
+        self.dash_vx = 0.0
+        self.dash_vy = 0.0
 
     def rect(self):
         return (self.x - self.w / 2, self.y - self.h / 2, self.w, self.h)
@@ -225,6 +288,57 @@ class Enemy:
                 self.anchor += 11 * dt
                 self.y += 11 * dt
                 self.x += math.sin(self.t * 1.1) * 26 * dt
+        elif k == data.LANCER_ID:
+            # Slides to its station, then works a charge-fire cycle. It never
+            # descends past the anchor: a beam is only fair if you can see
+            # where it will be, and one falling on top of you is not that.
+            if self.y < self.anchor:
+                self.y += speed * dt
+            else:
+                self.x += math.sin(self.t * 0.9) * 22 * dt
+                self.anchor += 6 * dt
+                self.y += 6 * dt
+            if self.beam is not None:
+                # The beam does not follow the ship: it stays where it aimed
+                # when the charge began, which is the whole telegraph.
+                self.beam.update(dt)
+                if self.beam.done:
+                    self.beam = None
+                    self.fire_t = self.rng.uniform(1.3, 2.1)
+            else:
+                self.fire_t -= dt
+                if self.fire_t <= 0 and self.y > data.TOP + 8:
+                    self.beam = EnemyBeam(target_x, self.y + 6)
+        elif k == data.SPINNER_ID:
+            # Drifts in slowly and turns. Its rings are the one attack in the
+            # roster that does not care where you are, which is what makes it
+            # awkward next to everything that does.
+            self.y += speed * dt
+            self.x += math.sin(self.t * 1.6) * 34 * dt
+        elif k == data.PHANTOM_ID:
+            # The Void's answer to a maxed rate of fire: it will not stand
+            # still to be hit. Lining up under it is the trigger, so parking
+            # beneath one and holding the trigger -- which is what a stock
+            # shmup rewards by then -- is exactly what does not work.
+            if self.dash_t > 0:
+                self.dash_t -= dt
+                self.x += self.dash_vx * dt
+                self.y += self.dash_vy * dt
+            else:
+                self.y += speed * dt
+                lined_up = abs(self.x - target_x) < 26
+                self.fire_t -= dt * (2.2 if lined_up else 1.0)
+                if lined_up and self.t > 0.7:
+                    self.t = 0.0
+                    self.dash_t = 0.24
+                    if self.rng.random() < 0.45:
+                        # backwards, out of the firing lane entirely
+                        self.dash_vy = -260.0
+                        self.dash_vx = self.rng.choice((-1, 1)) * 90.0
+                    else:
+                        away = 1.0 if self.x > target_x else -1.0
+                        self.dash_vx = away * 300.0
+                        self.dash_vy = -40.0
         elif k == data.BOSS_ID:
             self.x += self.drift * dt
             if self.x < data.PLAY_L + 60 or self.x > data.PLAY_R - 60:
@@ -239,6 +353,10 @@ class Enemy:
         else:
             self.y += speed * dt
         self.x = max(data.PLAY_L + 6, min(data.PLAY_R - 6, self.x))
+        if k == data.PHANTOM_ID:
+            # A dash backwards must not park it off the top, where nothing can
+            # reach it and it stops being a fight.
+            self.y = max(data.TOP + 10, self.y)
 
     def wants_to_fire(self, dt, haste=1.0):
         """`haste` is the difficulty tier's contribution.
@@ -288,6 +406,19 @@ class Enemy:
                     out.append(EnemyBullet(self.x, self.y + 6,
                                            math.cos(a) * base * 0.8,
                                            math.sin(a) * base * 0.8, 2))
+        elif k == data.SPINNER_ID:
+            spin = self.t * 1.7
+            for i in range(6):
+                a = spin + i * (math.tau / 6)
+                out.append(EnemyBullet(self.x, self.y,
+                                       math.cos(a) * base * 0.66,
+                                       math.sin(a) * base * 0.66, 2))
+        elif k == data.PHANTOM_ID:
+            for i in (-1, 1):
+                a = ang + i * 0.1
+                out.append(EnemyBullet(self.x, self.y + 4,
+                                       math.cos(a) * base * 1.15,
+                                       math.sin(a) * base * 1.15, 2))
         elif k == data.TANK_ID:
             for i in (-1, 1):
                 a = ang + i * 0.16
@@ -306,7 +437,8 @@ class Enemy:
         return self.kind == data.BOSS_ID or self.y < data.BOT + 30
 
 
-ENEMY_SIZE = ((11, 11), (11, 11), (11, 12), (11, 13), (17, 13), (37, 17))
+ENEMY_SIZE = ((11, 11), (11, 11), (11, 12), (11, 13), (17, 13), (37, 17),
+              (11, 10), (11, 11), (11, 9))
 
 
 def overlaps(a, b):

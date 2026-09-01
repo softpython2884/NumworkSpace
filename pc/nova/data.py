@@ -363,16 +363,83 @@ P2_PAL = {"v": VIOLET, "w": WHITE, "o": ORANGE}
 CRYSTAL_PAL = {"w": WHITE, "c": CYAN}
 REPAIR_PAL = {"w": WHITE, "g": GREEN}
 
+# The three late arrivals. Each takes a mechanic off a boss and bolts it to
+# something mortal, which is the point: a boss teaches you an attack once, and
+# then the attack comes back on a ship you can actually shoot down.
+LANCER = """
+..aaaa
+.aaaaa
+aaaaaa
+aawwwa
+aaaaaa
+.aaaaa
+..aaaa
+...ddd
+....dd
+....dd
+""".strip("\n")
+
+SPINNER = """
+.....a
+....aa
+...aaa
+..aaaa
+.aaaaa
+..awwa
+.aaaaa
+..aaaa
+...aaa
+....aa
+.....a
+""".strip("\n")
+
+PHANTOM = """
+.....a
+....aa
+...aaa
+..awwa
+..awwa
+.aaaaa
+.aa.aa
+aa...a
+a....a
+""".strip("\n")
+
 # Enemies are tinted per sector at load time: 'a' is the accent, 'd' its dark
 # shade, 'w' stays white.
-GRUNT_ID, WEAVER_ID, TURRET_ID, RUSHER_ID, TANK_ID, BOSS_ID = range(6)
-ENEMY_ART = (GRUNT, WEAVER, TURRET, RUSHER, TANK, BOSS_SENTINEL)
+(GRUNT_ID, WEAVER_ID, TURRET_ID, RUSHER_ID, TANK_ID, BOSS_ID,
+ LANCER_ID, SPINNER_ID, PHANTOM_ID) = range(9)
+ENEMY_ART = (GRUNT, WEAVER, TURRET, RUSHER, TANK, BOSS_SENTINEL,
+             LANCER, SPINNER, PHANTOM)
 
-ENEMY_HP = (2, 2, 6, 2, 12, 1)
-ENEMY_SCORE = (10, 15, 25, 20, 40, 500)
-ENEMY_SPEED = (46, 42, 40, 118, 22, 0)      # pixels per second
-ENEMY_FIRE = (2.6, 0.0, 1.4, 0.0, 1.9, 0.8)  # seconds between shots, 0 = never
-ENEMY_COST = (1, 2, 3, 2, 5, 0)             # threat budget
+ENEMY_HP = (2, 2, 6, 2, 12, 1, 4, 5, 4)
+ENEMY_SCORE = (10, 15, 25, 20, 40, 500, 35, 40, 55)
+ENEMY_SPEED = (46, 42, 40, 118, 22, 0, 34, 30, 40)   # pixels per second
+# seconds between shots, 0 = never (the lancer answers with a beam instead)
+ENEMY_FIRE = (2.6, 0.0, 1.4, 0.0, 1.9, 0.8, 0.0, 2.2, 1.5)
+ENEMY_COST = (1, 2, 3, 2, 5, 0, 4, 4, 4)             # threat budget
+
+# When each kind starts showing up, by sector index (0 = sector 1).
+#
+# The roster used to be `min(2 + sector, 5)`: everything was unlocked by
+# sector 3, so sectors 4 and 5 introduced nothing at all and the last third of
+# a run was the first third with bigger numbers. It grows the whole way now,
+# and the Void gets something of its own.
+ENEMY_UNLOCK = {
+    GRUNT_ID: 0,
+    WEAVER_ID: 0,
+    RUSHER_ID: 1,
+    TURRET_ID: 2,
+    LANCER_ID: 2,       # the beam, first met on LANCE at sector 3
+    TANK_ID: 3,
+    SPINNER_ID: 4,      # SENTINEL's rings, on something that comes to you
+    PHANTOM_ID: 5,      # the Void only
+}
+
+
+def roster(sector):
+    """Which enemy kinds a sector can field."""
+    return [k for k, first in sorted(ENEMY_UNLOCK.items()) if first <= sector]
 
 # --- upgrades ------------------------------------------------------------
 # All twelve are back: the calculator build could only afford eight.

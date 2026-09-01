@@ -64,6 +64,13 @@ class Bot:
                 # stationary threat sitting at the player's own height
                 if beam.t > beam.CHARGE * 0.45:
                     out.append((beam.x, me.y, 0.0, 0.0, beam.width * 0.5 + 8.0))
+        # Lancers carry the same attack on a killable ship. A pilot that cannot
+        # see them would rate the enemy by how invisible it is to a heuristic,
+        # which is exactly the mistake the repulsion field made.
+        for e in self.c.enemies:
+            b = e.beam
+            if b is not None and b.t > b.CHARGE * 0.45 and b.y < me.y:
+                out.append((b.x, me.y, 0.0, 0.0, b.WIDTH * 0.5 + 8.0))
         return out
 
     def cost(self, px, py, vx, vy, threats):

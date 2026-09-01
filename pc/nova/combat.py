@@ -66,12 +66,15 @@ class Combat:
 
         sector = run.sector
         self.is_boss = kind == data.N_BOSS
-        budget = (16 + sector * 10 + run.node * 3) * run.budget_mult
+        budget = (16 + sector * 13 + run.node * 3) * run.budget_mult
         # Capped: past this an uncapped budget makes waves longer, not harder.
-        self.budget = min(budget, 104)
+        # The cap and the slope both went up for the late game, where sectors
+        # 4 and 5 were running the same wave sizes as sector 3 and going past
+        # in the same few minutes.
+        self.budget = min(budget, 150)
         if kind == data.N_ELITE:
             self.budget *= 1.5
-        self.pool = min(2 + sector, 5)
+        self.pool = data.roster(sector)
 
         if self.is_boss:
             self.budget = 0
@@ -116,12 +119,14 @@ class Combat:
         return best.x, best.y
 
     def spawn_wave(self, dt):
-        if self.budget <= 0 or len(self.enemies) > 14:
+        # How many can be in the air at once, not just how many arrive: a flat
+        # ceiling of 14 was what actually held the late sectors down.
+        if self.budget <= 0 or len(self.enemies) >= min(20, 13 + self.run.sector):
             return
         self.spawn_t -= dt
         if self.spawn_t > 0:
             return
-        kind = self.rng.randrange(self.pool)
+        kind = self.rng.choice(self.pool)
         self.budget -= data.ENEMY_COST[kind]
         hp = data.ENEMY_HP[kind] + self.run.sector
         x = self.rng.uniform(data.PLAY_L + 24, data.PLAY_R - 24)
@@ -260,7 +265,11 @@ class Combat:
             s.update(dt)
         for e in self.enemies:
             tx, ty = self.nearest_player_pos(e.x)
+            had_beam = e.beam is not None
             e.update(dt, tx)
+            if e.beam is not None and not had_beam:
+                # the telegraph needs a sound as well as a line
+                self.audio.play("boss_warn", 0.35, throttle=0.2)
             if e.y > data.TOP - 4 and e.wants_to_fire(
                     dt, 1.0 + self.run.fire_bonus):
                 self.shots.extend(e.volley(tx, ty, self.run.difficulty
@@ -432,6 +441,9 @@ class Combat:
                     s.y = 1e9
                     break
             for e in self.enemies:
+                if e.beam is not None and e.beam.firing and \
+                        ent.overlaps(pr, e.beam.rect()):
+                    self.hurt_player(p)
                 if e.hp > 0 and ent.overlaps(pr, e.rect()):
                     self.hurt_player(p)
                     if e.kind != data.BOSS_ID:
@@ -468,6 +480,9 @@ class Combat:
                 surf.blit(img, (int(pk.x) - img.get_width() // 2,
                                 int(pk.y) - img.get_height() // 2))
 
+        for e in self.enemies:
+            if e.beam is not None:
+                e.beam.draw(surf)
         for e in self.enemies:
             img = a.enemy_surface(sector, e.kind, e.flash > 0)
             surf.blit(img, (int(e.x) - img.get_width() // 2,
