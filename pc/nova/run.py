@@ -60,8 +60,17 @@ class Run:
 
     def enter_node(self):
         self.bombs = self.max_bombs
+
+    def enter_sector(self):
+        """Nanorepair, once a sector.
+
+        It used to run at every node: +1 hull per level, six nodes a sector,
+        for as long as the run lasted. The Void has no end, so neither did
+        that -- a maxed nanorepair outhealed everything the game could do,
+        which is not an upgrade, it is an off switch.
+        """
         if self.upgrades[data.U_REGEN]:
-            self.heal(self.upgrades[data.U_REGEN])
+            self.heal(2 * self.upgrades[data.U_REGEN])
 
     def crystal_value(self):
         return 2 + self.upgrades[data.U_GREED]

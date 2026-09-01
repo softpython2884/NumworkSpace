@@ -105,7 +105,7 @@ class Driver:
             self.frames += 1
         self.fights += 1
         self.log.append((g.run.sector, g.run.node, c.kind, round(t, 1),
-                         hull0 - g.run.hull, c.result))
+                         hull0, hull0 - g.run.hull, c.result))
         if t >= 240.0:
             raise RuntimeError("fight did not terminate: sector %d kind %d"
                                % (g.run.sector, c.kind))

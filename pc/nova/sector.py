@@ -12,6 +12,20 @@ from . import data
 COLS = 8
 ROWS = 3
 
+# Which columns may carry a trader or a repair bay. Not column 1 (too early to
+# have earned anything) and never COLS-2, the approach to the boss.
+SPECIAL_COLS = (3, 4, 5)
+
+# How often a sector offers a repair bay at all.
+#
+# It used to be every sector, on every route, in the column right before the
+# boss. That is not a map, it is a corridor with decorations: you could play a
+# whole sector badly and still meet the warlord at full hull, so nothing that
+# happened on the way there mattered. Rare is the point -- a repair should be
+# a detour you plan a column ahead and pay for by missing the trader.
+REST_CHANCE = 0.55
+SECOND_SHOP_CHANCE = 0.3
+
 
 class SectorMap:
     def __init__(self, rng, sector):
@@ -28,10 +42,9 @@ class SectorMap:
         """Grown forward from the entry node, so every node placed is reachable
         by construction -- no connectivity pass, no backtracking.
 
-        Column 4 is always a trader and column 6 always a repair bay: whichever
-        route the player takes, the pacing is the same. That rule came out of
-        simulating runs on the calculator, where routes that missed both put the
-        win rate at 12%.
+        Fights and events are rolled per node; the trader and the repair bay
+        are then *placed*, on single nodes rather than whole columns. Placing
+        them by column was what made every route the same route.
         """
         self.nodes[(0, 1)] = data.N_FIGHT
         current = [1]
@@ -46,6 +59,7 @@ class SectorMap:
                 self.nodes[(col, r)] = self.pick_kind(col)
             current = nxt
         self.nodes[(COLS - 1, 1)] = data.N_BOSS
+        self.place_specials()
 
         for (col, row) in self.nodes:
             outs = []
@@ -57,16 +71,58 @@ class SectorMap:
     def pick_kind(self, col):
         if col == 1:
             return data.N_FIGHT
-        if col == 4:
-            return data.N_SHOP
-        if col == 6:
-            return data.N_REST
+        if col == COLS - 2:
+            # The approach. Whatever route you took, the last thing before the
+            # warlord costs you something: this is the column that used to hand
+            # out a free repair, and with it a boss fight that began at full
+            # hull no matter how the sector had gone.
+            return data.N_ELITE if self.rng.random() < 0.34 else data.N_FIGHT
         roll = self.rng.random()
-        if roll < 0.42:
+        if roll < 0.50:
             return data.N_FIGHT
-        if roll < 0.66:
+        if roll < 0.76:
             return data.N_ELITE
         return data.N_EVENT
+
+    def place_specials(self):
+        """One trader, and less than half the time a repair bay.
+
+        Both go in the same column when it has the room, on different rows.
+        That is the whole design: crystals or hull, not both, and the choice
+        was really made a column earlier when you picked the row that could
+        reach the one you wanted.
+        """
+        by_col = {}
+        for (col, row) in self.nodes:
+            if col in SPECIAL_COLS:
+                by_col.setdefault(col, []).append(row)
+        if not by_col:
+            return
+
+        wide = sorted(c for c in by_col if len(by_col[c]) >= 2)
+        home = self.rng.choice(wide or sorted(by_col))
+        rows = sorted(by_col[home])
+        self.rng.shuffle(rows)
+        self.nodes[(home, rows[0])] = data.N_SHOP
+
+        if self.rng.random() < REST_CHANCE:
+            if len(rows) >= 2:
+                self.nodes[(home, rows[1])] = data.N_REST
+            else:
+                spare = sorted(c for c in by_col if c != home)
+                if spare:
+                    col = self.rng.choice(spare)
+                    self.nodes[(col, self.rng.choice(sorted(by_col[col])))] = \
+                        data.N_REST
+
+        # A second trader now and then, so a run is never starved of upgrades
+        # by bad luck alone.
+        if self.rng.random() < SECOND_SHOP_CHANCE:
+            spare = sorted((c, r) for c in by_col for r in by_col[c]
+                           if self.nodes[(c, r)] not in (data.N_SHOP,
+                                                         data.N_REST))
+            if spare:
+                self.nodes[self.rng.choice(spare)] = data.N_SHOP
 
     def options(self):
         return self.links.get((self.col, self.row), [])

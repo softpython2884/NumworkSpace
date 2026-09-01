@@ -322,9 +322,9 @@ aaaaaaaaddddddddaaa
 
 BOSS_ART = (BOSS_SENTINEL, BOSS_HIVE, BOSS_LANCE, BOSS_BULWARK, BOSS_WARDEN)
 BOSS_NAME = ("SENTINEL", "HIVE MOTHER", "LANCE", "BULWARK", "WARDEN")
-BOSS_TELL = ("Fans of fire. Read the gaps.",
-             "It launches escorts. Cut them down.",
-             "It charges a beam. Do not be there.",
+BOSS_TELL = ("Fans, then walls. There is always one gap.",
+             "It launches escorts, and arms the walls.",
+             "It charges a beam. Later, four of them.",
              "Break the pods before the core.",
              "All of it, at once.")
 
@@ -392,14 +392,23 @@ SHOP = (
     ("OVERDRIVE CELL", U_BOMB, 40, "+1 bomb per node"),
     ("HULL PLATING", U_HULL, 44, "+2 max hull, heals 2"),
     ("SCAVENGER", U_GREED, 30, "+1 crystal per pickup"),
-    ("NANOREPAIR", U_REGEN, 40, "+1 hull at every node"),
+    ("NANOREPAIR", U_REGEN, 40, "+2 hull at every sector"),
 )
 
 # --- difficulty ----------------------------------------------------------
+# name, hull, enemy budget, boss/enemy rate bonus, blurb
+#
+# The bar is deep because the fights are dense. A bullet-hell boss that can
+# take a third of your hull in one mistake needs a hull you can afford to make
+# mistakes with -- otherwise "hard" just means "the first hit ends the run",
+# which is not difficulty, it is fragility.
+# The budget spread is narrow on purpose: enemies are also salvage, so a tier
+# that fields many more of them hands the player a better ship in exchange.
+# The tiers separate on rate of fire and on the depth of the hull bar instead.
 DIFFICULTIES = (
-    ("CADET", 16, 0.70, 0.0, "Forgiving. Learn the patterns."),
-    ("PILOT", 12, 1.00, 0.15, "The intended fight."),
-    ("ACE", 9, 1.35, 0.35, "Fast, dense, unkind."),
+    ("CADET", 24, 0.85, 0.0, "Forgiving. Learn the patterns."),
+    ("PILOT", 18, 1.00, 0.28, "The intended fight."),
+    ("ACE", 12, 1.15, 0.78, "Fast, dense, unkind."),
 )
 
 # --- map nodes -----------------------------------------------------------

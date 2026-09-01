@@ -196,21 +196,118 @@ maintenant sa propre mécanique.
 
 | | |
 |---|---|
-| **SENTINEL** | Plateforme d'artillerie. Éventails de tirs, puis salves circulaires. Lis les trous. |
-| **HIVE MOTHER** | Porte-vaisseaux. Ouvre ses baies et lâche des escortes. Le canon est accessoire. |
-| **LANCE** | Un canon géant. Charge, **télégraphe**, puis tire un rayon vertical. Toujours esquivable. |
-| **BULWARK** | Un cœur derrière deux **modules destructibles**. Tant qu'un module tient, le cœur ne prend qu'un quart des dégâts — la barre de vie passe au bleu pour le dire. |
-| **WARDEN** | Tout à la fois, en trois phases : modules, puis rayon, puis escortes. |
+| **SENTINEL** | Éventails, puis des **murs avec un seul trou**, puis une spirale par-dessus. Le boss qui enseigne le vocabulaire des quatre autres. |
+| **HIVE MOTHER** | Ouvre ses baies et lâche des escortes, arme les **canons muraux**, et fait pleuvoir depuis le haut. |
+| **LANCE** | Un rayon, puis deux, puis un **peigne de quatre** qui balaie l'arène d'un bord à l'autre. La colonne sûre finit toujours par ne plus l'être. |
+| **BULWARK** | Un cœur derrière deux **modules destructibles** qui tirent en rafales. Tant qu'un module tient, le cœur ne prend qu'un quart des dégâts — la barre passe au bleu pour le dire. Casse-les et le cœur cesse de se retenir. |
+| **WARDEN** | Tout à la fois : canons muraux dès le début, rayons en phase 2, baies ouvertes en phase 3, modules toujours dans le chemin. |
 
 Ils partagent un corps — dérive, points de vie, phases selon la coque restante.
 Ce qui change est une seule méthode, `act`, dispatchée une fois par image : le
 seul endroit où vit la personnalité d'un boss.
 
+### Dense, mais pas injuste
+
+Aucun de ces motifs n'est aléatoire. Une spirale est la même spirale à chaque
+tour, un mur a toujours exactement un trou, un rayon est fixé là où il visait
+au début de la charge. C'est la différence entre difficile et injuste : le
+motif est fait pour être lu et traversé, pas subi. Trois choses existent
+uniquement pour ça — la boîte de collision du vaisseau fait 6×9 dans un sprite
+de 13×17, un coup à la coque offre 1,4 seconde d'invulnérabilité, et la bombe
+nettoie l'écran.
+
+### Le rythme : tempête, puis fenêtre
+
+Le premier jet de ces boss ne s'arrêtait jamais de tirer. C'était l'erreur.
+Sans fenêtre pour riposter, un combat cesse d'être quelque chose qu'on lit et
+devient de l'arithmétique : **60 secondes** d'esquive à grignoter le boss entre
+deux frôlements. Mesuré.
+
+Ils respirent maintenant. Chaque boss alterne une **tempête** (3 à 4,4 s selon
+la phase) et une **fenêtre** (1,7 à 1,1 s) pendant laquelle tout se tait —
+boss, modules et canons muraux compris. Quatre coins cyan apparaissent autour
+du boss pour la signaler ; un cadre complet voudrait dire « blindé », alors la
+fenêtre a sa propre forme.
+
+Le résultat mesuré : le combat tombe à **45 secondes**, les dégâts encaissés
+passent de 7,4 à 4,5 points de coque, et la tempête peut être bien plus
+méchante qu'elle n'aurait osé l'être sans la pause.
+
+### Des canons sur les murs
+
+Le boss tient le milieu de l'écran. Sans les canons muraux, les bords sont
+l'endroit où l'on va pour être tranquille — et un combat avec un coin sûr est
+un combat qu'on gagne en s'y asseyant. Ils sont **destructibles**, donc nettoyer
+un côté est un vrai choix à faire avec les secondes où l'on ne tire pas sur le
+boss, et ils **s'arment visiblement** pendant une seconde avant leur premier
+tir : un projectile venu du hors-champ n'est pas un motif, c'est une embuscade.
+
 Chaque combat s'ouvre sur une carte qui nomme le boss et dit ce qu'il fait : un
 combat qu'on n'a jamais vu ne devrait pas commencer par une surprise qu'on ne
-pouvait pas lire. Et leur cadence de tir dépend du secteur — le premier boss se
-rencontre souvent avec un vaisseau d'origine, et un motif juste à la vitesse du
-secteur 5 n'est pas un motif juste au secteur 1.
+pouvait pas lire.
+
+## La carte : un choix, pas un couloir
+
+Un secteur est un graphe à embranchements, et pendant un moment il n'en avait
+que l'apparence. Le générateur remplissait des **colonnes entières** : la
+colonne 4 était toujours un marchand, la colonne 6 toujours un atelier de
+réparation. Quelle que soit la route prise, on croisait les deux — et le
+dernier nœud avant le boss rendait la coque à neuf. On pouvait jouer un secteur
+n'importe comment et affronter le seigneur de guerre à pleine vie de toute
+façon. Rien de ce qui arrivait en chemin ne comptait.
+
+Les nœuds spéciaux sont maintenant posés **un par un**, pas par colonne :
+
+| | avant | maintenant |
+|---|---|---|
+| Ateliers par secteur | 1,87 | **0,41** |
+| Secteurs qui en proposent un | 100 % | **42 %** |
+| Toutes les routes en croisent un | 100 % | **11 %** |
+| Atelier juste avant le boss | 100 % | **0 %** |
+
+Quand les deux sont présents, **le marchand et l'atelier sont dans la même
+colonne, sur deux lignes différentes** : on a l'un ou l'autre, et le choix a
+réellement été fait une colonne plus tôt, en prenant la ligne qui pouvait
+atteindre celui qu'on voulait. Cristaux ou coque.
+
+La dernière colonne avant le boss est toujours une patrouille ou une patrouille
+d'élite. Quelle que soit la route, la dernière chose avant le boss coûte
+quelque chose.
+
+En échange, un atelier vaut le détour : il rend **45 % de la barre** au lieu
+d'un forfait de 5 points, et si la coque est déjà pleine l'équipage revend le
+blindage en trop.
+
+### L'attrition, et pourquoi elle n'existait pas
+
+En cherchant pourquoi on arrivait toujours au boss à pleine vie, la mesure a
+donné une réponse inattendue : **une patrouille rapportait −0,13 point de
+coque**. Négatif. On finissait un combat en meilleur état qu'on ne l'avait
+commencé.
+
+Deux fuites, toutes deux invisibles sans compter :
+
+- chaque ennemi tué avait **9 %** de chances de lâcher un correctif de coque.
+  À dix-huit morts par combat, cela soignait plus que le combat ne coûtait.
+  Ramené à 3 %.
+- **NANOREPAIR** soignait à chaque nœud, par niveau. Le Vide n'a pas de fin,
+  donc cette réparation non plus : au niveau 3 elle surpassait tout ce que le
+  jeu pouvait infliger. Ce n'est pas une amélioration, c'est un interrupteur.
+  Elle soigne maintenant une fois par secteur.
+
+### Les difficultés séparent enfin
+
+Autre chose que la mesure a trouvée : la difficulté se réglait surtout par le
+**nombre** d'ennemis — or un ennemi est aussi du butin. As envoyait 35 %
+d'ennemis en plus, donc 35 % de cristaux en plus, donc un meilleur vaisseau, et
+gagnait plus souvent que Cadet. Le curseur se battait contre lui-même.
+
+Les trois niveaux se séparent maintenant sur la **cadence de tir** — qui ne
+rend rien au joueur — et sur la profondeur de la barre de coque, qui est
+volontairement large : un boss capable de prendre un tiers de la coque en une
+erreur a besoin d'une coque avec laquelle on peut se permettre des erreurs.
+Sinon « difficile » veut seulement dire « le premier coup termine la partie »,
+ce qui n'est pas de la difficulté, c'est de la fragilité.
 
 ## Structure
 
@@ -236,6 +333,7 @@ pc/
   nova.spec          recette PyInstaller
   tests/             suite headless
   tools/shots.py     rend les captures d'écran
+  tools/balance.py   mesure la carte et les combats
   tools/make_icon.py dessine l'icône
 ```
 
@@ -245,6 +343,7 @@ Tout tourne sans écran (`SDL_VIDEODRIVER=dummy`), donc en intégration continue
 
 ```bash
 python3 tests/run_all.py     # runs complets + budget d'image
+python3 tools/balance.py     # carte et difficulté, chiffrées
 python3 tools/shots.py       # régénère les captures
 ```
 
@@ -279,18 +378,49 @@ exactement là où il est déjà le plus présent. Les trois régressions (un cr
 qui ne coupe rien, une rotation qui saute une variante, l'anti-répétition mal
 indexée) ont été introduites volontairement pour vérifier que le test les voit.
 
+### Le pilote automatique est un instrument, et il a fallu le réparer
+
+La première version était un champ de répulsion : additionner un vecteur qui
+s'éloigne de chaque projectile proche, et suivre la somme. Ça marche contre du
+tir visé et échoue complètement contre tout ce dont un motif de bullet hell est
+fait. Un mur avec un trou le pousse **le long** du mur au lieu de le pousser
+dans le trou ; une spirale l'entoure, les vecteurs s'annulent, il s'arrête et
+meurt.
+
+Mesurer la difficulté des boss avec ce pilote-là, c'était mesurer à quel point
+un motif est illisible pour une mauvaise heuristique — et la première chose
+qu'il aurait conseillée, c'est de supprimer les bonnes attaques.
+
+Il esquive maintenant comme une personne : pour chacune des neuf directions du
+stick, calculer à quelle distance passerait le projectile le plus menaçant, et
+prendre la meilleure. Le point d'approche est calculé proprement, position
+relative contre vitesse relative, parce qu'un projectile proche mais qui
+s'éloigne n'est pas une menace et qu'un projectile lointain qui converge en est
+une.
+
+Validation : sur le jeu **inchangé**, l'ancien pilote faisait 7/4/1 et le
+nouveau fait **7/6/5**. Il n'est jamais moins bon, et il est beaucoup plus fort
+là où l'ancien perdait contre des motifs qu'il ne savait tout simplement pas
+lire. Ce qui veut dire au passage que l'ancien équilibrage mesurait en partie
+l'incompétence du robot.
+
+Il a une information parfaite, des réflexes parfaits, et **aucune mémoire** :
+il n'apprend jamais qu'un motif se répète. Un bon humain est moins bon sur le
+premier point et bien meilleur sur le second, ce qui est à peu près la bonne
+erreur à avoir quand les chiffres servent à régler la difficulté.
+
 Mesures actuelles :
 
 | | |
 |---|---|
-| Taux de victoire (bot) | Cadet 7/8 · **Pilote 4/8** · As 1/8 |
-| Durée d'une partie gagnée | 9 à 11 min de combat |
-| Coût d'une image (p99) | **1,35 ms** sur un budget de 16,7 ms |
+| Taux de victoire (bot, 12 graines) | Cadet 8/12 · **Pilote 5/12** · As 2/12 |
+| Dégâts pris par boss | **4,5** points de coque (0,6 avant) |
+| Combats de boss sans une égratignure | **18 %** (57 % avant) |
+| Durée d'un combat de boss | **45 s** (30 s avant) |
+| Durée d'une partie gagnée | 12 à 16 min de combat |
+| Coût d'une image (p99) | **0,94 ms** sur un budget de 16,7 ms |
+| Pire cas mesuré | WARDEN phase 3 en coop, **102 projectiles** à l'écran |
 | Construction des sons | 24 échantillons en **0,03 s** au démarrage |
-
-Le pilote automatique a une information parfaite et des réflexes parfaits mais
-une stratégie naïve : un humain fera moins bien, ce qui est le bon sens de
-l'erreur pour un contrôle de difficulté.
 
 ## Licence
 

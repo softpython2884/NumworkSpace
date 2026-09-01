@@ -134,6 +134,7 @@ class Game:
         self.new_sector()
 
     def new_sector(self):
+        self.run.enter_sector()
         self.map = sector.SectorMap(self.run.rng, self.run.sector)
         self.enter_map()
 
@@ -150,11 +151,20 @@ class Game:
             self.enter_trader(free=False)
         elif kind == data.N_REST:
             self.state = REST
-            healed = min(5, self.run.max_hull - self.run.hull)
-            self.run.heal(5)
-            self.message = ("REPAIR BAY", data.GREEN,
-                            "Hull patched: +%d" % healed if healed else
-                            "Hull already full")
+            # Worth the detour, because it is now a detour: a repair bay is on
+            # fewer than half the sector maps and never on the road to the
+            # boss, so when you do reach one it should mean something.
+            amount = max(4, self.run.max_hull * 45 // 100)
+            healed = min(amount, self.run.max_hull - self.run.hull)
+            if healed:
+                self.run.heal(amount)
+                self.message = ("REPAIR BAY", data.GREEN,
+                                "Hull patched: +%d" % healed)
+            else:
+                # Nothing to fix. The crew sells the spare plating.
+                self.run.crystals += 18
+                self.message = ("REPAIR BAY", data.GREEN,
+                                "Hull already full: +18 crystals")
         elif kind == data.N_EVENT:
             self.enter_event()
         else:

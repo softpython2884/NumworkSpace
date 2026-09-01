@@ -21,17 +21,25 @@ from nova.run import Run
 OUT = os.path.normpath(os.path.join(PC, "..", "docs", "img"))
 DT = 1 / 60.0
 
+def clean(c):
+    """A frame worth photographing.
+
+    Three ways a shot of a boss fight shows nothing about the boss fight: the
+    boss caught mid hit-flash is a white silhouette, a screen flash from a hull
+    hit washes the whole arena red, and a boss caught venting between volleys
+    is a boss with its guns off.
+    """
+    return (c.boss.flash <= 0 and c.flash.amount < 0.05 and c.boss.storming)
+
+
 # what to wait for, so each shot shows the boss doing its thing
-# `flash <= 0` everywhere: catching a boss mid hit-flash paints it solid white
-# and the shot shows nothing about the fight.
 WAIT = {
-    0: lambda c: len(c.shots) >= 8 and c.boss.flash <= 0,
-    1: lambda c: len(c.enemies) >= 3 and c.boss.flash <= 0 and c.flash.amount < 0.05,
-    2: lambda c: c.boss.beams and c.boss.beams[0].firing and c.boss.flash <= 0,
-    3: lambda c: (any(not p.alive for p in c.boss.pods) and len(c.shots) > 3
-                  and c.boss.flash <= 0),
-    4: lambda c: (c.boss.beams and len(c.shots) > 5 and c.boss.flash <= 0
-                  and c.flash.amount < 0.05),
+    0: lambda c: clean(c) and len(c.shots) >= 8,
+    1: lambda c: clean(c) and len(c.enemies) >= 3,
+    2: lambda c: clean(c) and c.boss.beams and c.boss.beams[0].firing,
+    3: lambda c: (clean(c) and any(not p.alive for p in c.boss.pods)
+                  and len(c.shots) > 3),
+    4: lambda c: clean(c) and c.boss.beams and len(c.shots) > 5,
 }
 
 

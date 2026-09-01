@@ -32,8 +32,12 @@ le jeu. `pc/build_exe.cmd` en fait un `.exe` autonome avec icône.
 | La carte de secteur à embranchements | Un des cinq boss |
 
 Déplacement 8 directions, tir automatique, coop 2 joueurs (clavier et/ou
-manette), **cinq boss** aux mécaniques distinctes — rayons, escortes, modules
-destructibles.
+manette), **cinq boss** aux mécaniques distinctes — murs à un seul trou,
+spirales, peignes de rayons, escortes, modules destructibles et canons sur les
+murs de l'arène. Les motifs sont denses mais jamais aléatoires : ils sont faits
+pour être lus, et chaque boss ménage une **fenêtre** où tout se tait, le temps
+de riposter. La carte, elle, est un vrai choix — un atelier de réparation n'est
+proposé que dans 42 % des secteurs, sur une seule branche, jamais avant le boss.
 Zoom toujours entier, arène de taille fixe quelle que soit la résolution, et
 20 effets sonores synthétisés au démarrage (aucun fichier audio) —
 [à écouter](docs/nova-sound-demo.wav). Le tir étant automatique, `M` fait le

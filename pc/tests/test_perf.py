@@ -28,7 +28,8 @@ DT = 1 / 60.0
 BUDGET_MS = 16.7
 
 
-def measure(label, kind, sector, players=1, upgrades=None, seconds=25.0):
+def measure(label, kind, sector, players=1, upgrades=None, seconds=25.0,
+            hp_frac=None):
     pygame.init()
     pygame.display.set_mode((data.W, data.H))
     art = Art()
@@ -39,6 +40,14 @@ def measure(label, kind, sector, players=1, upgrades=None, seconds=25.0):
     for u in (upgrades or {}):
         run.upgrades[u] = upgrades[u]
     combat = Combat(run, kind, art)
+    if hp_frac is not None and combat.boss is not None:
+        # Drop it straight into the phase we actually want to measure. A boss
+        # fight spends its first half in phase 0, so a timed sample of one
+        # never sees the pattern that costs the most to run or to draw.
+        combat.boss.hp = int(combat.boss.max_hp * hp_frac)
+        combat.intro_t = 0.0
+        for pod in combat.boss.pods:
+            pod.hp = 0
     surf = pygame.Surface((data.W, data.H))
     bots = [Bot(combat, i) for i in range(players)]
 
@@ -85,14 +94,20 @@ def main():
         ("co-op, maxed guns", data.N_FIGHT, 4, 2, maxed),
     ]
     rows = [measure(*c) for c in cases]
-    print("%-20s %7s %7s %7s %8s %8s %6s" %
-          ("scene", "avg ms", "p99", "worst", "update", "draw", "parts"))
-    print("-" * 70)
+    # The worst case the game can actually produce: the last boss, in its final
+    # phase, pods already broken so the core is running its spiral, with the
+    # wall guns out and a co-op pair of maxed guns answering.
+    rows.append(measure("WARDEN phase 3, co-op", data.N_BOSS, 4, 2, maxed,
+                        seconds=30.0, hp_frac=0.2))
+    print("%-22s %7s %7s %7s %8s %8s %6s %7s" %
+          ("scene", "avg ms", "p99", "worst", "update", "draw", "parts",
+           "shots"))
+    print("-" * 80)
     ok = True
     for r in rows:
-        print("%-20s %7.2f %7.2f %7.2f %8.2f %8.2f %6d" %
+        print("%-22s %7.2f %7.2f %7.2f %8.2f %8.2f %6d %7d" %
               (r["label"], r["avg"], r["p99"], r["worst"], r["update"],
-               r["draw"], r["particles"]))
+               r["draw"], r["particles"], r["entities"]))
         if r["p99"] > BUDGET_MS:
             ok = False
     print()

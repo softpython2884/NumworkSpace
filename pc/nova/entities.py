@@ -237,10 +237,19 @@ class Enemy:
             self.y += speed * dt
         self.x = max(data.PLAY_L + 6, min(data.PLAY_R - 6, self.x))
 
-    def wants_to_fire(self, dt):
+    def wants_to_fire(self, dt, haste=1.0):
+        """`haste` is the difficulty tier's contribution.
+
+        It used to change only the muzzle velocity, which is barely a
+        difficulty setting at all: ACE fielded more enemies than PILOT, and
+        more enemies meant more salvage, so the hard tier bought the player a
+        better ship and won more often than the easy one. Rate of fire is the
+        knob that costs the player something without paying them back.
+        """
         rate = data.ENEMY_FIRE[self.kind]
         if rate <= 0:
             return False
+        rate /= haste
         if self.kind == data.BOSS_ID and self.t > 40.0:
             # Enrage: a stalled boss fight gets faster, not longer. This is what
             # bounds the fight -- either it dies or you do.

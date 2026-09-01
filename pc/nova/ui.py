@@ -84,14 +84,18 @@ def draw_hud(surf, art, run, tag, boss=None):
     pygame.draw.line(surf, data.DARK, (0, data.HUD_H - 1),
                      (data.W, data.HUD_H - 1))
 
-    # hull as pips: reads faster than a number when you are being shot at
+    # Hull as pips: reads faster than a number when you are being shot at.
+    # The pitch tightens on a long bar, or a well-upgraded ship on CADET runs
+    # its hull into the score.
+    pitch = 6 if run.max_hull <= 16 else max(3, 120 // run.max_hull)
+    pip_w = max(2, pitch - 2)
     for i in range(run.max_hull):
         full = i < run.hull
         colour = data.GREEN if run.hull > run.max_hull * 0.35 else data.RED
         pygame.draw.rect(surf, colour if full else data.DARK,
-                         (8 + i * 6, 9, 4, 9), 0 if full else 1)
+                         (8 + i * pitch, 9, pip_w, 9), 0 if full else 1)
 
-    bx = 8 + run.max_hull * 6 + 12
+    bx = 8 + run.max_hull * pitch + 12
     for i in range(run.max_bombs):
         pygame.draw.rect(surf, data.ORANGE if i < run.bombs else data.DARK,
                          (bx + i * 9, 9, 7, 9), 0 if i < run.bombs else 1)

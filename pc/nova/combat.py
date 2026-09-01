@@ -66,11 +66,11 @@ class Combat:
 
         sector = run.sector
         self.is_boss = kind == data.N_BOSS
-        budget = (14 + sector * 9 + run.node * 3) * run.budget_mult
+        budget = (16 + sector * 10 + run.node * 3) * run.budget_mult
         # Capped: past this an uncapped budget makes waves longer, not harder.
-        self.budget = min(budget, 96)
+        self.budget = min(budget, 104)
         if kind == data.N_ELITE:
-            self.budget *= 1.4
+            self.budget *= 1.5
         self.pool = min(2 + sector, 5)
 
         if self.is_boss:
@@ -78,7 +78,7 @@ class Combat:
             # One boss per sector, cycling once the campaign is behind you.
             self.boss = boss_mod.Boss(sector, sector, self.boss_hp(),
                                       (data.PLAY_L + data.PLAY_R) / 2,
-                                      data.TOP - 20)
+                                      data.TOP - 20, run.fire_bonus)
             self.tag = self.boss.name
             self.intro_t = 2.6
             self.audio.play("boss_warn")
@@ -92,7 +92,12 @@ class Combat:
         rate = 0.16 * (0.85 ** up[data.U_RATE])
         barrels = len(ent.SPREADS[min(up[data.U_SPREAD], 3)])
         dps = (1 + up[data.U_DMG]) * barrels / rate
-        return int(55 + self.run.sector * 20 + dps * 4.0)
+        # Deliberately shorter than it was. The patterns take far more dodging
+        # than they used to, so the same pool of hit points bought an 80-second
+        # fight instead of a 30-second one -- and a dense pattern held for 80
+        # seconds stops being a fight you read and becomes one you survive by
+        # arithmetic.
+        return int(40 + self.run.sector * 16 + dps * 2.6)
 
     # -- helpers ----------------------------------------------------------
     def live_players(self):
@@ -153,7 +158,12 @@ class Combat:
             n = 1 + (self.rng.random() < 0.45)
             for _ in range(n):
                 self.pickups.append(ent.Pickup(e.x, e.y))
-            if self.rng.random() < 0.09:
+            # A hull patch every eleventh kill sounds modest until you count
+            # the kills: at eighteen a fight it healed more than the fight
+            # cost, so a sector's worth of patrols left the ship *fuller* than
+            # it started and nothing that happened on the way to the boss
+            # could matter. Measured at 0.09: -0.13 hull per patrol.
+            if self.rng.random() < 0.03:
                 self.pickups.append(ent.Pickup(e.x, e.y, kind=1))
 
     def hurt_player(self, p):
@@ -238,7 +248,8 @@ class Combat:
         for e in self.enemies:
             tx, ty = self.nearest_player_pos(e.x)
             e.update(dt, tx)
-            if e.y > data.TOP - 4 and e.wants_to_fire(dt):
+            if e.y > data.TOP - 4 and e.wants_to_fire(
+                    dt, 1.0 + self.run.fire_bonus):
                 self.shots.extend(e.volley(tx, ty, self.run.difficulty
                                            + self.run.fire_bonus))
                 self.audio.play("enemy_shoot", 0.55, throttle=0.06)
@@ -293,10 +304,18 @@ class Combat:
                 continue
             box = (shot.x - 1, shot.y - 3, shot.w, shot.h)
             hit = None
+            # Pods and wall guns first: they are in front of the core, and
+            # hitting the armoured core when you meant to hit one of them
+            # feels like the game cheated.
             for pod in b.live_pods():
                 if ent.overlaps(box, pod.rect()):
                     hit = pod
                     break
+            if hit is None:
+                for turret in b.live_turrets():
+                    if ent.overlaps(box, turret.rect()):
+                        hit = turret
+                        break
             if hit is not None:
                 hit.hp -= shot.dmg
                 hit.flash = 0.08
