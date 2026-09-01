@@ -402,13 +402,19 @@ SHOP = (
 # take a third of your hull in one mistake needs a hull you can afford to make
 # mistakes with -- otherwise "hard" just means "the first hit ends the run",
 # which is not difficulty, it is fragility.
-# The budget spread is narrow on purpose: enemies are also salvage, so a tier
-# that fields many more of them hands the player a better ship in exchange.
-# The tiers separate on rate of fire and on the depth of the hull bar instead.
+# Every tier fields the same number of enemies, and the column is kept only
+# because the endless Void still wants to scale.
+#
+# Narrowing the spread was not enough: enemies are salvage, so CADET's 0.85
+# bought fewer crystals, a worse ship, longer boss fights and more damage taken
+# than PILOT -- the easy tier measured *harder* than the intended one, 12 wins
+# against 13. A difficulty knob that pays the player back is not a difficulty
+# knob. The tiers separate on rate of fire and on the depth of the hull bar,
+# and on nothing else.
 DIFFICULTIES = (
-    ("CADET", 24, 0.85, 0.0, "Forgiving. Learn the patterns."),
+    ("CADET", 24, 1.00, 0.0, "Forgiving. Learn the patterns."),
     ("PILOT", 18, 1.00, 0.35, "The intended fight."),
-    ("ACE", 12, 1.15, 0.78, "Fast, dense, unkind."),
+    ("ACE", 12, 1.00, 0.78, "Fast, dense, unkind."),
 )
 
 # --- map nodes -----------------------------------------------------------

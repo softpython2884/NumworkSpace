@@ -126,9 +126,15 @@ class Combat:
         self.spawn_t = gap
 
     def spawn_escort(self, kind, x, y):
-        """A boss launching an escort. Weaker than a spawned wave enemy: they
-        arrive in numbers and the boss is the real fight."""
-        hp = max(1, data.ENEMY_HP[kind] + self.run.sector - 1)
+        """A boss launching an escort.
+
+        Half the hit points of a wave enemy. They arrive in numbers and they
+        are meant to be moving obstacles, not health bars: at full strength
+        they soaked so much of the player's fire that HIVE MOTHER's fight ran
+        to 66 seconds against 30 to 53 for every other boss, and a fight that
+        long accumulates damage whatever its patterns are doing.
+        """
+        hp = max(1, (data.ENEMY_HP[kind] + self.run.sector) // 2)
         e = ent.Enemy(kind, max(data.PLAY_L + 12, min(data.PLAY_R - 12, x)),
                       y, hp, self.run.sector, self.rng)
         e.score = data.ENEMY_SCORE[kind] // 2
