@@ -97,27 +97,37 @@ def every_path_crosses(smap, kind):
 
 
 # --- the fights ----------------------------------------------------------
-def run_set(seeds, difficulty):
+def run_set(seeds, difficulty, by_sector=None):
+    """Play the seeds and total up what the boss fights cost.
+
+    `by_sector` accumulates the same figures per sector, because the average
+    across a campaign hides the thing worth knowing: whether the *first* boss
+    a player meets is a fight or a formality.
+    """
     wins = 0
     boss_dmg = []
     boss_entry = []
     boss_time = []
     untouched = 0
-    rest_visits = []
     minutes = []
     for s in seeds:
         r = test_run.run_once(s, difficulty=difficulty)
         wins += r["won"]
         minutes.append(r["minutes"])
-        rests = 0
-        for (_sec, _node, kind, t, hull0, lost, _res) in r["log"]:
-            if kind == data.N_BOSS:
-                boss_dmg.append(lost)
-                boss_entry.append(hull0 / r["max_hull"])
-                boss_time.append(t)
-                if lost == 0:
-                    untouched += 1
-        rest_visits.append(rests)
+        for (sec, _node, kind, t, hull0, lost, _res) in r["log"]:
+            if kind != data.N_BOSS:
+                continue
+            boss_dmg.append(lost)
+            boss_entry.append(hull0 / r["max_hull"])
+            boss_time.append(t)
+            if lost == 0:
+                untouched += 1
+            if by_sector is not None:
+                row = by_sector.setdefault(min(sec, 5), [0, 0.0, 0.0, 0])
+                row[0] += 1
+                row[1] += lost
+                row[2] += t
+                row[3] += (lost == 0)
     n = max(1, len(boss_dmg))
     return {
         "wins": wins,
@@ -152,11 +162,26 @@ def main(argv):
     print("%-7s %6s %8s %9s %8s %10s %8s" %
           ("tier", "won", "boss hp", "dmg taken", "no dmg", "boss secs",
            "minutes"))
+    per_sector = {}
     for d, row in enumerate(data.DIFFICULTIES):
-        r = run_set(seeds, d)
+        # only the middle tier feeds the per-sector table: it is the intended
+        # fight, and mixing tiers into one average says nothing about either
+        r = run_set(seeds, d, per_sector if d == 1 else None)
         print("%-7s %2d/%-3d %7.0f%% %9.1f %7.0f%% %10.1f %8.1f" %
               (row[0], r["wins"], r["runs"], 100 * r["boss_entry"],
                r["boss_dmg"], r["untouched"], r["boss_time"], r["minutes"]))
+
+    print("\n=== boss by sector, %s ===" % data.DIFFICULTIES[1][0])
+    print("%-12s %7s %10s %10s %8s" %
+          ("boss", "fights", "dmg taken", "secs", "no dmg"))
+    for sec in sorted(per_sector):
+        count, dmg, secs, clean = per_sector[sec]
+        name = data.BOSS_NAME[sec % len(data.BOSS_NAME)]
+        label = "S%d %s" % (sec + 1, name)
+        print("%-12s %7d %10.1f %10.1f %7.0f%%" %
+              (label[:12], count, dmg / count, secs / count,
+               100.0 * clean / count))
+
     print("\nboss hp   = hull on entering the fight, as %% of the bar")
     print("dmg taken = hull lost in the boss fight")
     print("no dmg    = boss fights finished without a scratch")

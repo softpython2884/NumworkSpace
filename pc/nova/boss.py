@@ -90,13 +90,13 @@ class Beam:
 class Pod:
     """A turret bolted to a boss. Armours the core while it lives."""
 
-    def __init__(self, offset_x, offset_y, hp):
+    def __init__(self, offset_x, offset_y, hp, rng):
         self.ox = offset_x
         self.oy = offset_y
         self.hp = hp
         self.max_hp = hp
         self.flash = 0.0
-        self.fire_t = random.uniform(0.5, 1.6)
+        self.fire_t = rng.uniform(0.5, 1.6)
         self.w = 11
         self.h = 7
         self.x = 0.0
@@ -123,14 +123,14 @@ class Turret:
 
     ARM = 1.05
 
-    def __init__(self, side, y, hp):
+    def __init__(self, side, y, hp, rng):
         self.side = side                # -1 left wall, +1 right wall
         self.y = y
         self.hp = hp
         self.max_hp = hp
         self.flash = 0.0
         self.t = 0.0
-        self.fire_t = self.ARM + random.uniform(0.15, 0.8)
+        self.fire_t = self.ARM + rng.uniform(0.15, 0.8)
         self.w = 9
         self.h = 11
 
@@ -194,17 +194,22 @@ def _clamp(v, lo, hi):
 
 
 class Boss:
-    def __init__(self, index, sector, hp, x, y, fire_bonus=0.0):
+    def __init__(self, index, sector, hp, x, y, fire_bonus=0.0, rng=None):
         self.index = index % BOSS_COUNT
         self.sector = sector
         self.fire_bonus = fire_bonus
+        # Every roll a boss makes comes from here. Left on the module-level
+        # `random`, a seeded run was not reproducible at all: the same seed
+        # won once and lost the next two times, and every balance figure
+        # measured against it was noise wearing a number's clothes.
+        self.rng = rng or random
         self.hp = hp
         self.max_hp = hp
         self.x = x
         self.y = y
         self.t = 0.0
         self.fire_t = 1.2
-        self.drift = random.choice((-1, 1)) * 34.0
+        self.drift = self.rng.choice((-1, 1)) * 34.0
         self.flash = 0.0
         self.phase = 0
         self.w = 37
@@ -220,11 +225,12 @@ class Boss:
         self.cycle = 0              # alternates attacks within a phase
         self.storming = True
         self.burst_t = self.STORM[0][0]
-        self.spin = random.uniform(0.0, math.tau)
+        self.spin = self.rng.uniform(0.0, math.tau)
         self.stream_t = 0.0
         if self.index in (BULWARK, WARDEN):
             pod_hp = max(8, hp // 6)
-            self.pods = [Pod(-34, 5, pod_hp), Pod(34, 5, pod_hp)]
+            self.pods = [Pod(-34, 5, pod_hp, self.rng),
+                         Pod(34, 5, pod_hp, self.rng)]
 
     # -- helpers ----------------------------------------------------------
     @property
@@ -406,7 +412,7 @@ class Boss:
         stop shooting and go somewhere -- and it asks it in a way nobody can
         misread.
         """
-        hole = random.uniform(data.PLAY_L + gap, data.PLAY_R - gap)
+        hole = self.rng.uniform(data.PLAY_L + gap, data.PLAY_R - gap)
         x = data.PLAY_L + 6
         while x < data.PLAY_R - 6:
             if abs(x - hole) > gap / 2:
@@ -421,9 +427,9 @@ class Boss:
         Pressure rather than a threat: it takes space away without ever
         chasing anyone, which is what makes the aimed attacks land."""
         for _ in range(count):
-            x = random.uniform(data.PLAY_L + 8, data.PLAY_R - 8)
+            x = self.rng.uniform(data.PLAY_L + 8, data.PLAY_R - 8)
             combat.shots.append(ent.EnemyBullet(
-                x, data.TOP + 2, random.uniform(-16, 16), speed, 2))
+                x, data.TOP + 2, self.rng.uniform(-16, 16), speed, 2))
         combat.audio.play("enemy_shoot", 0.5, throttle=0.08)
 
     def deploy_turrets(self, combat, phase, hp=None):
@@ -433,9 +439,10 @@ class Boss:
         self.deployed = phase
         arena = data.BOT - data.TOP
         hp = hp or max(6, self.max_hp // 11)
-        side = random.choice((-1, 1))
+        side = self.rng.choice((-1, 1))
         for f, s in ((0.34, side), (0.60, -side)):
-            self.turrets.append(Turret(s, data.TOP + arena * f, hp))
+            self.turrets.append(
+                Turret(s, data.TOP + arena * f, hp, self.rng))
         combat.audio.play("boss_warn", 0.45)
 
     def cast_beams(self, combat, comb=False):
@@ -448,14 +455,15 @@ class Boss:
             start = data.PLAY_L + span * 0.13
             step = (span * 0.74) / (n - 1)
             order = list(range(n))
-            if random.random() < 0.5:
+            if self.rng.random() < 0.5:
                 order.reverse()
             for i, slot in enumerate(order):
                 self.beams.append(Beam(start + slot * step, width,
                                        delay=i * 0.32))
         elif self.phase >= 1:
             self.beams.append(Beam(tx, width))
-            self.beams.append(Beam(tx + random.choice((-78, 78)), width))
+            self.beams.append(
+                Beam(tx + self.rng.choice((-78, 78)), width))
         else:
             self.beams.append(Beam(tx, width))
         combat.audio.play("boss_warn", 0.5)
@@ -498,27 +506,38 @@ class Boss:
                 self.spray(combat, self.scaled(5, 7), 0.17, 134)
 
     def act_hive(self, dt, combat):
-        """The bays are the threat, and from phase 1 the walls are too."""
+        """The bays are the threat, and the walls are armed from the start.
+
+        Measured as the weakest of the five by a distance -- 1.0 hull a fight
+        and half of them finished without a scratch, on the boss most players
+        meet second. The reason is that escorts alone are not a pattern: they
+        are enemies, and enemies are the thing a player is already good at.
+        So they come down the flanks as well as out of the bays, the wall guns
+        are up from the first phase, and the boss keeps firing while they
+        close instead of politely waiting its turn.
+        """
+        self.deploy_turrets(combat, 0)
         self.spawn_t -= dt
         if self.spawn_t <= 0:
-            self.spawn_t = (3.4, 2.6, 1.9)[self.phase]
+            self.spawn_t = (3.0, 2.4, 1.8)[self.phase]
             wave = (3, 4, 5)[self.phase]
             for i in range(wave):
-                kind = data.RUSHER_ID if (i % 2 and self.phase) else data.GRUNT_ID
+                kind = data.RUSHER_ID if i % 2 else data.GRUNT_ID
                 combat.spawn_escort(kind,
                                     self.x + (i - (wave - 1) / 2.0) * 18,
                                     self.y + 12)
+            if self.phase >= 1:
+                # down the flanks, where nobody is looking
+                for x in (data.PLAY_L + 26, data.PLAY_R - 26):
+                    combat.spawn_escort(data.RUSHER_ID, x, data.TOP + 8)
             combat.audio.play("jump", 0.5)
-        if self.phase >= 1:
-            self.deploy_turrets(combat, 1)
         self.fire_t -= dt
         if self.fire_t <= 0:
-            self.fire_t = self.fire_rate() * 1.2
+            self.fire_t = self.fire_rate()
             self.cycle += 1
+            self.rain(combat, self.scaled(5, 9))
             if self.cycle % 2:
-                self.rain(combat, self.scaled(4, 7))
-            else:
-                self.spray(combat, self.scaled(3, 5), 0.28, 108)
+                self.spray(combat, self.scaled(3, 5), 0.26, 112)
 
     def act_lance(self, dt, combat):
         """Charge, telegraph, fire -- one beam, then two, then a comb that

@@ -78,7 +78,7 @@ class Combat:
             # One boss per sector, cycling once the campaign is behind you.
             self.boss = boss_mod.Boss(sector, sector, self.boss_hp(),
                                       (data.PLAY_L + data.PLAY_R) / 2,
-                                      data.TOP - 20, run.fire_bonus)
+                                      data.TOP - 20, run.fire_bonus, self.rng)
             self.tag = self.boss.name
             self.intro_t = 2.6
             self.audio.play("boss_warn")
@@ -120,7 +120,7 @@ class Combat:
         self.budget -= data.ENEMY_COST[kind]
         hp = data.ENEMY_HP[kind] + self.run.sector
         x = self.rng.uniform(data.PLAY_L + 24, data.PLAY_R - 24)
-        e = ent.Enemy(kind, x, data.TOP - 14, hp, self.run.sector)
+        e = ent.Enemy(kind, x, data.TOP - 14, hp, self.run.sector, self.rng)
         self.enemies.append(e)
         gap = max(0.28, 0.85 - self.run.sector * 0.06) * self.rng.uniform(0.6, 1.4)
         self.spawn_t = gap
@@ -130,7 +130,7 @@ class Combat:
         arrive in numbers and the boss is the real fight."""
         hp = max(1, data.ENEMY_HP[kind] + self.run.sector - 1)
         e = ent.Enemy(kind, max(data.PLAY_L + 12, min(data.PLAY_R - 12, x)),
-                      y, hp, self.run.sector)
+                      y, hp, self.run.sector, self.rng)
         e.score = data.ENEMY_SCORE[kind] // 2
         self.enemies.append(e)
         self.particles.burst(x, y, 10, 90, (data.WHITE, data.ORANGE), 0.3)
@@ -152,19 +152,21 @@ class Combat:
         if big:
             self.flash.pop(data.WHITE, 0.55)
             for _ in range(14):
-                self.pickups.append(ent.Pickup(e.x + self.rng.uniform(-24, 24),
-                                               e.y + self.rng.uniform(-10, 10)))
+                self.pickups.append(ent.Pickup(
+                    e.x + self.rng.uniform(-24, 24),
+                    e.y + self.rng.uniform(-10, 10), rng=self.rng))
         else:
             n = 1 + (self.rng.random() < 0.45)
             for _ in range(n):
-                self.pickups.append(ent.Pickup(e.x, e.y))
+                self.pickups.append(ent.Pickup(e.x, e.y, rng=self.rng))
             # A hull patch every eleventh kill sounds modest until you count
             # the kills: at eighteen a fight it healed more than the fight
             # cost, so a sector's worth of patrols left the ship *fuller* than
             # it started and nothing that happened on the way to the boss
             # could matter. Measured at 0.09: -0.13 hull per patrol.
             if self.rng.random() < 0.03:
-                self.pickups.append(ent.Pickup(e.x, e.y, kind=1))
+                self.pickups.append(ent.Pickup(e.x, e.y, kind=1,
+                                               rng=self.rng))
 
     def hurt_player(self, p):
         if p.invuln > 0:
@@ -368,7 +370,8 @@ class Combat:
                              drag=1.2, gravity=40)
         for _ in range(16):
             self.pickups.append(ent.Pickup(b.x + self.rng.uniform(-30, 30),
-                                           b.y + self.rng.uniform(-10, 10)))
+                                           b.y + self.rng.uniform(-10, 10),
+                                           rng=self.rng))
         # escorts do not outlive their carrier
         for e in list(self.enemies):
             self.kill_enemy(e)

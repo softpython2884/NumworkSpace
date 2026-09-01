@@ -61,11 +61,12 @@ class Pickup:
 
     __slots__ = ("x", "y", "vx", "vy", "kind", "life")
 
-    def __init__(self, x, y, kind=0):
+    def __init__(self, x, y, kind=0, rng=None):
         self.x = x
         self.y = y
-        self.vx = random.uniform(-24, 24)
-        self.vy = random.uniform(-40, -8)
+        rng = rng or random
+        self.vx = rng.uniform(-24, 24)
+        self.vy = rng.uniform(-40, -8)
         self.kind = kind          # 0 crystal, 1 hull
         self.life = 11.0
 
@@ -183,18 +184,20 @@ SPREADS = (
 
 class Enemy:
     __slots__ = ("x", "y", "kind", "hp", "max_hp", "t", "fire_t", "anchor",
-                 "drift", "w", "h", "flash", "phase", "score")
+                 "drift", "w", "h", "flash", "phase", "score", "rng")
 
-    def __init__(self, kind, x, y, hp, sector):
+    def __init__(self, kind, x, y, hp, sector, rng=None):
         self.kind = kind
         self.x = x
         self.y = y
         self.hp = hp
         self.max_hp = hp
-        self.t = random.uniform(0, 6.0)
-        self.fire_t = random.uniform(0.4, 1.8)
-        self.anchor = data.TOP + 40 + random.uniform(0, (data.BOT - data.TOP) * 0.28)
-        self.drift = random.choice((-1, 1)) * random.uniform(30, 62)
+        self.rng = rng or random
+        self.t = self.rng.uniform(0, 6.0)
+        self.fire_t = self.rng.uniform(0.4, 1.8)
+        self.anchor = data.TOP + 40 + self.rng.uniform(
+            0, (data.BOT - data.TOP) * 0.28)
+        self.drift = self.rng.choice((-1, 1)) * self.rng.uniform(30, 62)
         self.flash = 0.0
         self.phase = 0
         self.score = data.ENEMY_SCORE[kind]
@@ -256,7 +259,7 @@ class Enemy:
             rate *= max(0.32, 1.0 - (self.t - 40.0) * 0.022)
         self.fire_t -= dt
         if self.fire_t <= 0:
-            self.fire_t = rate * random.uniform(0.75, 1.3)
+            self.fire_t = rate * self.rng.uniform(0.75, 1.3)
             return True
         return False
 

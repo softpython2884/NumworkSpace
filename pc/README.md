@@ -260,9 +260,9 @@ Les nœuds spéciaux sont maintenant posés **un par un**, pas par colonne :
 
 | | avant | maintenant |
 |---|---|---|
-| Ateliers par secteur | 1,87 | **0,41** |
-| Secteurs qui en proposent un | 100 % | **42 %** |
-| Toutes les routes en croisent un | 100 % | **11 %** |
+| Ateliers par secteur | 1,87 | **0,54** |
+| Secteurs qui en proposent un | 100 % | **54 %** |
+| Toutes les routes en croisent un | 100 % | **12 %** |
 | Atelier juste avant le boss | 100 % | **0 %** |
 
 Quand les deux sont présents, **le marchand et l'atelier sont dans la même
