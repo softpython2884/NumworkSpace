@@ -229,9 +229,9 @@ boss, modules et canons muraux compris. Quatre coins cyan apparaissent autour
 du boss pour la signaler ; un cadre complet voudrait dire « blindé », alors la
 fenêtre a sa propre forme.
 
-Le résultat mesuré : le combat tombe à **45 secondes**, les dégâts encaissés
-passent de 7,4 à 4,5 points de coque, et la tempête peut être bien plus
-méchante qu'elle n'aurait osé l'être sans la pause.
+Le résultat mesuré au moment de ce changement : le combat tombe de 60 à
+**45 secondes**, les dégâts encaissés de 7,4 à 4,5 points de coque, et la
+tempête peut être bien plus méchante qu'elle n'aurait osé l'être sans la pause.
 
 ### Des canons sur les murs
 
@@ -302,12 +302,19 @@ Autre chose que la mesure a trouvée : la difficulté se réglait surtout par le
 d'ennemis en plus, donc 35 % de cristaux en plus, donc un meilleur vaisseau, et
 gagnait plus souvent que Cadet. Le curseur se battait contre lui-même.
 
-Les trois niveaux se séparent maintenant sur la **cadence de tir** — qui ne
-rend rien au joueur — et sur la profondeur de la barre de coque, qui est
-volontairement large : un boss capable de prendre un tiers de la coque en une
-erreur a besoin d'une coque avec laquelle on peut se permettre des erreurs.
-Sinon « difficile » veut seulement dire « le premier coup termine la partie »,
-ce qui n'est pas de la difficulté, c'est de la fragilité.
+Resserrer l'écart n'a pas suffi, et il a fallu une deuxième mesure pour le voir :
+avec 0,85 d'ennemis, **Cadet mesurait plus dur que Pilote** — 12 victoires
+contre 13, des combats de boss plus longs (57,8 s contre 48,0) et plus de dégâts
+encaissés (5,4 contre 4,8), tout en tirant moins vite. Moins d'ennemis, moins de
+cristaux, un moins bon vaisseau, un combat plus long.
+
+Les trois niveaux envoient maintenant **exactement le même nombre d'ennemis** et
+se séparent sur la **cadence de tir** — qui ne rend rien au joueur — et sur la
+profondeur de la barre de coque, qui est volontairement large : un boss capable
+de prendre un tiers de la coque en une erreur a besoin d'une coque avec laquelle
+on peut se permettre des erreurs. Sinon « difficile » veut seulement dire « le
+premier coup termine la partie », ce qui n'est pas de la difficulté, c'est de la
+fragilité.
 
 ## Structure
 
@@ -378,6 +385,39 @@ exactement là où il est déjà le plus présent. Les trois régressions (un cr
 qui ne coupe rien, une rotation qui saute une variante, l'anti-répétition mal
 indexée) ont été introduites volontairement pour vérifier que le test les voit.
 
+### Une graine ne reproduisait rien
+
+Le pire défaut trouvé pendant cette passe ne faisait planter personne. La même
+graine, lancée trois fois de suite : **gagnée, perdue au secteur 4, perdue au
+secteur 5**.
+
+Les motifs de boss et le comportement des ennemis tiraient leur hasard du
+`random` du module, pas du générateur de la partie. Rien ne plantait, aucun test
+ne tombait — le jeu n'était simplement pas reproductible. Ce qui veut dire que
+le banc d'équilibrage rapportait du bruit d'un lancement à l'autre comme si
+c'était l'effet d'un changement, et qu'une graine dans un rapport de bug ne
+reproduisait rien du tout.
+
+Tout ce qui décide de l'issue d'un combat passe maintenant par le RNG de la
+partie : dérive du boss, phase des spirales, trou des murs, pluie, ordre des
+peignes de rayons, côté des canons muraux, décalage des modules, position et
+cadence des ennemis, dispersion du butin. Les particules, le shake et le champ
+d'étoiles restent volontairement sur le générateur global : ils ne peuvent
+changer aucune issue.
+
+`test_determinism.py` prend l'empreinte d'une patrouille et des cinq boss, joués
+deux fois depuis la même graine avec la même séquence d'entrées, en **perturbant
+volontairement le générateur global entre les deux** pour qu'un tirage qui fuit
+ne puisse pas retomber juste par hasard. Sa première version passait alors que
+le bug était réintroduit exprès : elle ne suivait que le boss du secteur 2, et
+HIVE MOTHER n'a pas de murs. En suivant les cinq, le même bug fait tomber
+SENTINEL, BULWARK et WARDEN.
+
+Son garde-fou — une graine différente doit changer l'empreinte — a lui aussi dû
+être assoupli. L'ouverture de LANCE ne tire qu'un seul dé, le sens de sa dérive,
+donc quatre graines d'affilée peuvent légitimement donner le même combat. Exiger
+qu'une graine précise diffère testait la graine, pas le jeu.
+
 ### Le pilote automatique est un instrument, et il a fallu le réparer
 
 La première version était un champ de répulsion : additionner un vecteur qui
@@ -411,16 +451,36 @@ erreur à avoir quand les chiffres servent à régler la difficulté.
 
 Mesures actuelles :
 
+Toutes sur 24 graines, sur une version où une graine **reproduit** vraiment une
+partie (voir plus bas — pendant un moment ce n'était pas le cas, et les chiffres
+publiés mesuraient du bruit) :
+
 | | |
 |---|---|
-| Taux de victoire (bot, 12 graines) | Cadet 8/12 · **Pilote 5/12** · As 2/12 |
-| Dégâts pris par boss | **4,5** points de coque (0,6 avant) |
-| Combats de boss sans une égratignure | **18 %** (57 % avant) |
-| Durée d'un combat de boss | **45 s** (30 s avant) |
-| Durée d'une partie gagnée | 12 à 16 min de combat |
-| Coût d'une image (p99) | **0,94 ms** sur un budget de 16,7 ms |
-| Pire cas mesuré | WARDEN phase 3 en coop, **102 projectiles** à l'écran |
+| Taux de victoire (bot) | Cadet 15/24 · **Pilote 10/24** · As 5/24 |
+| Dégâts pris par boss | **4,9** points de coque (0,6 avant) |
+| Combats de boss sans une égratignure | **14 %** (57 % avant) |
+| Durée d'un combat de boss | **47 s** (30 s avant) |
+| Durée d'une partie gagnée | 12 à 14 min de combat |
+| Coût d'une image (p99) | **1,11 ms** sur un budget de 16,7 ms |
+| Pire cas mesuré | WARDEN phase 3 en coop, **103 projectiles** à l'écran |
 | Construction des sons | 24 échantillons en **0,03 s** au démarrage |
+
+Et boss par boss, au niveau Pilote — c'est le tableau qui a servi à régler la
+difficulté, parce qu'une moyenne sur cinq boss cache exactement ce qu'on veut
+savoir : est-ce que le *premier* boss rencontré est un combat ou une formalité ?
+
+| Boss | Dégâts pris | Durée | Sans une égratignure |
+|---|---:|---:|---:|
+| S1 SENTINEL | 2,3 | 30 s | 8 % |
+| S2 HIVE MOTHER | 7,5 | 66 s | 25 % |
+| S3 LANCE | 2,3 | 42 s | 18 % |
+| S4 BULWARK | 3,4 | 42 s | 7 % |
+| S5 WARDEN | 9,7 | 56 s | 7 % |
+
+HIVE MOTHER, le boss du secteur 2, mesurait **1,0 point de dégâts et la moitié
+de ses combats sans une égratignure** avant cette passe — de loin le plus faible
+des cinq, sur le boss que la plupart des gens rencontrent en deuxième.
 
 ## Licence
 
