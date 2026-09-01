@@ -233,6 +233,26 @@ Le résultat mesuré au moment de ce changement : le combat tombe de 60 à
 **45 secondes**, les dégâts encaissés de 7,4 à 4,5 points de coque, et la
 tempête peut être bien plus méchante qu'elle n'aurait osé l'être sans la pause.
 
+### Le bouclier d'entrée
+
+Un boss retient son tir le temps de sa carte de présentation. Le joueur, lui,
+ne retient rien : un vaisseau garé dessous place tous ses tirs. Mesuré, avant
+correction — **5 à 25 % de la coque du boss partaient avant qu'il ait agi**,
+25 % avec un vaisseau d'origine au secteur 1, moins avec des canons maxés
+seulement parce que les points de vie du boss suivent l'armement apporté.
+
+Des dégâts gratuits contre quelque chose qui ne peut pas répondre, ce n'est pas
+une récompense d'habileté, c'est un trou dans les règles. Le boss est donc
+intouchable pendant toute cette fenêtre — la constante est de 2 s et le combat
+l'élargit à la durée de la carte, parce qu'un bouclier qui expire pendant que le
+boss retient encore son tir ne fait que déplacer le trou une seconde plus loin.
+Les modules sont couverts aussi, sinon l'astuce se déplaçait simplement sur
+BULWARK et WARDEN.
+
+Il se dessine en **cercle**. Le cadre veut déjà dire « modules qui blindent le
+cœur » et les coins cyan « en train de venter » : trois états qui changent ce
+que font tes tirs, trois formes.
+
 ### Des canons sur les murs
 
 Le boss tient le milieu de l'écran. Sans les canons muraux, les bords sont
@@ -457,14 +477,24 @@ publiés mesuraient du bruit) :
 
 | | |
 |---|---|
-| Taux de victoire (bot) | Cadet 15/24 · **Pilote 10/24** · As 5/24 |
-| Dégâts pris par boss | **4,9** points de coque (0,6 avant) |
-| Combats de boss sans une égratignure | **14 %** (57 % avant) |
-| Durée d'un combat de boss | **47 s** (30 s avant) |
-| Durée d'une partie gagnée | 12 à 14 min de combat |
+| Taux de victoire (bot) | Cadet 13/24 · **Pilote 14/24** · As 6/24 |
+| Dégâts pris par boss | **5,4** points de coque (0,6 avant) |
+| Combats de boss sans une égratignure | **15 %** (57 % avant) |
+| Durée d'un combat de boss | **49 s** (30 s avant) |
+| Durée d'une partie gagnée | 12 à 13 min de combat |
 | Coût d'une image (p99) | **1,11 ms** sur un budget de 16,7 ms |
 | Pire cas mesuré | WARDEN phase 3 en coop, **103 projectiles** à l'écran |
 | Construction des sons | 24 échantillons en **0,03 s** au démarrage |
+
+**Cadet et Pilote sont à égalité, et il ne faut pas le corriger.** 13 contre 14
+sur 24 graines, c'est un écart d'une partie, largement dans le bruit — mais
+c'est surtout la limite de l'instrument. Ce que Cadet donne, c'est 33 % de coque
+en plus et un tir adverse 35 % plus lent ; or ce pilote se fait très peu toucher,
+donc il ne dépense presque jamais cette coque supplémentaire. Un humain, qui
+encaisse bien davantage, sent la différence que le robot ne peut pas mesurer.
+Régler les niveaux jusqu'à ce que la courbe soit jolie **pour le robot**
+reviendrait à les régler contre le joueur. As, lui, se détache nettement (6/24),
+parce que la cadence de tir touche tout le monde de la même façon.
 
 Et boss par boss, au niveau Pilote — c'est le tableau qui a servi à régler la
 difficulté, parce qu'une moyenne sur cinq boss cache exactement ce qu'on veut
@@ -472,11 +502,11 @@ savoir : est-ce que le *premier* boss rencontré est un combat ou une formalité
 
 | Boss | Dégâts pris | Durée | Sans une égratignure |
 |---|---:|---:|---:|
-| S1 SENTINEL | 2,3 | 30 s | 8 % |
-| S2 HIVE MOTHER | 7,5 | 66 s | 25 % |
-| S3 LANCE | 2,3 | 42 s | 18 % |
-| S4 BULWARK | 3,4 | 42 s | 7 % |
-| S5 WARDEN | 9,7 | 56 s | 7 % |
+| S1 SENTINEL | 2,2 | 31 s | 12 % |
+| S2 HIVE MOTHER | 7,6 | 67 s | 17 % |
+| S3 LANCE | 3,4 | 43 s | 19 % |
+| S4 BULWARK | 4,1 | 47 s | 27 % |
+| S5 WARDEN | 10,2 | 59 s | **0 %** |
 
 HIVE MOTHER, le boss du secteur 2, mesurait **1,0 point de dégâts et la moitié
 de ses combats sans une égratignure** avant cette passe — de loin le plus faible

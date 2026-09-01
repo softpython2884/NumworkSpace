@@ -31,8 +31,8 @@ deux frôlements.
 
 | | avant | 1.1 |
 |---|---|---|
-| Dégâts pris par boss | 0,6 | **4,9** |
-| Combats finis sans une égratignure | 57 % | **14 %** |
+| Dégâts pris par boss | 0,6 | **5,4** |
+| Combats finis sans une égratignure | 57 % | **15 %** |
 
 Un boss est aussi **intouchable pendant sa carte de présentation**. Il retenait
 son tir ; le joueur non, et 5 à 25 % de sa coque partaient avant qu'il ait le
@@ -74,7 +74,12 @@ des motifs — un humain est l'inverse :
 
 | | Cadet | Pilote | As |
 |---|---|---|---|
-| Parties gagnées | 15/24 | 10/24 | 5/24 |
+| Parties gagnées | 13/24 | 14/24 | 6/24 |
+
+Cadet et Pilote sont à égalité pour ce pilote-là, et c'est la limite de la
+mesure plutôt qu'un défaut du jeu : ce que Cadet offre, c'est surtout de la
+coque en plus, et un robot qui se fait très peu toucher ne la dépense jamais.
+Un humain la sentira.
 
 Détail par boss, banc de mesure et raisonnement complet dans
 [`pc/README.md`](../pc/README.md).
