@@ -517,6 +517,12 @@ class Boss:
         close instead of politely waiting its turn.
         """
         self.deploy_turrets(combat, 0)
+        if self.phase == 2:
+            # Its damage came out right but 38% of fights still ended clean:
+            # a threat made of escorts is a threat you can delete, and once
+            # they are down there is nothing in the air. The last phase keeps
+            # something in the air whatever happens to the bays.
+            self.spiral(dt, combat, arms=2, rate=-2.2, speed=96)
         self.spawn_t -= dt
         if self.spawn_t <= 0:
             self.spawn_t = (3.0, 2.4, 1.8)[self.phase]
