@@ -362,8 +362,14 @@ class Boss:
         if self.enraged:
             base *= 0.62
         # A stalled fight gets faster, not longer: either it dies or you do.
-        if self.t > 45.0:
-            base *= max(0.4, 1.0 - (self.t - 45.0) * 0.02)
+        #
+        # The threshold is tied to how long the fight is supposed to take, and
+        # it was not moved when that changed. At 45 seconds against fights now
+        # meant to run forty to sixty, enrage stopped being the answer to a
+        # stalemate and became the ending of every boss fight: the test pilot
+        # lost 18 hull to the *first* boss, every seed, purely to the ramp.
+        if self.t > 80.0:
+            base *= max(0.45, 1.0 - (self.t - 80.0) * 0.015)
         return base
 
     def scaled(self, low, high):

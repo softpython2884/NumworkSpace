@@ -410,12 +410,36 @@ def _bass_note(freq, seconds):
                      attack=0.006, hold=seconds * 0.55, curve=1.8)
 
 
+# Per section: the arpeggio figure, the bass figure, and whether the arpeggio
+# takes the last bar off.
+#
+# The first version of this song ran one arpeggio shape and one bass walk for
+# all thirty-two bars and changed only the octave of the tune. That is four
+# sections on paper and one section in the ear -- the accompaniment has to move
+# too, or the melody is decorating a loop rather than sitting on an arrangement.
+ARPS = (
+    (0, 1, 2, 1, 2, 1, 0, 1),      # A  up and back, steady
+    (0, 2, 1, 2, 0, 2, 1, 2),      # B  wider, pivots on the fifth
+    (2, 1, 0, 1, 2, 1, 0, 1),      # A' mirrored, starts high
+    (0, -1, 1, -1, 0, -1, 1, -1),  # C  narrow, sits under everything
+)
+BASS_FIGURES = (
+    ((0.0, 0, 1.0), (1.5, 4, 0.5), (2.0, 0, 1.0), (3.5, -1, 0.5)),
+    ((0.0, 0, 0.5), (0.5, 0, 0.5), (1.5, 4, 0.5), (2.0, 0, 1.0),
+     (3.0, 4, 1.0)),
+    ((0.0, 0, 1.0), (1.0, 7, 0.5), (2.0, 0, 0.5), (2.5, 4, 0.5),
+     (3.5, -1, 0.5)),
+    ((0.0, 0, 2.0), (2.0, 4, 2.0)),
+)
+
+
 def build_track(index, seed=0):
     """Four sections of eight bars: A, B, A' an octave up, then a sparse C.
 
-    Three voices, the same three the old bed had. What is new is that they are
-    playing something: a chord progression underneath, and a melody that comes
-    back rather than a fresh handful of random notes every bar.
+    Three voices, the same three the old bed had -- one triangle, two pulses.
+    What is new is that they are playing something: a chord progression, a
+    melody that comes back, and an accompaniment that changes with the section
+    instead of running the same bar thirty-two times.
     """
     root, scale, prog, bpm = SECTOR_TRACKS[index % len(SECTOR_TRACKS)]
     rng = random.Random(seed * 977 + index * 31 + 7)
@@ -430,54 +454,51 @@ def build_track(index, seed=0):
 
     for section in range(SECTIONS):
         base = section * BARS_PER_SECTION
-        # A B A' C. The third lifts an octave, the fourth thins out -- the
-        # oldest way there is of making a repeat feel like a development.
         octave_up = 12 if section == 2 else 0
         sparse = section == 3
         transpose = 2 if section == 1 else 0
+        arp_shape = ARPS[section]
+        bass_figure = BASS_FIGURES[section]
+        # B walks the same four chords starting from the second, so the
+        # harmony moves somewhere new without a new progression to learn.
+        rotate = 1 if section == 1 else 0
 
         for b in range(BARS_PER_SECTION):
             bar_i = base + b
             t0 = bar_i * bar
-            chord = _triad(scale, prog[b % len(prog)])
+            chord = _triad(scale, prog[(b + rotate) % len(prog)])
             chord_root = root + chord[0]
-            nxt = _triad(scale, prog[(b + 1) % len(prog)])[0] + root
+            nxt = _triad(scale, prog[(b + rotate + 1) % len(prog)])[0] + root
+            # The last bar of every section drops the arpeggio. A hole is the
+            # cheapest variety there is and the ear uses it to hear the seam
+            # between sections.
+            breather = (b == BARS_PER_SECTION - 1)
 
             # --- triangle: bass ------------------------------------------
-            # Root, fifth, root, then a step toward the next chord. The
-            # approach note is what stops four bars of three notes from
-            # sounding like a metronome with a pitch.
-            walk = ((0.0, chord_root - 12, 1.0),
-                    (1.5, chord_root - 5, 0.5),
-                    (2.0, chord_root - 12, 1.0),
-                    (3.5, nxt - 13, 0.5))
-            for pos, semi, length in walk:
-                if sparse and pos not in (0.0, 2.0):
-                    continue
+            for pos, step, length in bass_figure:
+                semi = (nxt - 13) if step < 0 else (chord_root - 12 + step)
                 song.add(t0 + pos * beat,
                          _bass_note(_hz(semi), length * beat), 0.62)
 
             # --- pulse two: arpeggio -------------------------------------
-            # Eighths climbing and falling through the chord. This is the one
-            # voice the old bed already had right; it just had no chord to
-            # walk, so it walked a scale at random.
-            if not sparse:
-                shape = (0, 1, 2, 1, 2, 1, 0, 1)
+            if not breather:
                 for e in range(8):
-                    semi = root + chord[shape[e]] + (12 if e >= 4 else 0)
+                    if sparse and e % 2:
+                        continue
+                    d = arp_shape[e]
+                    semi = root + _degree(scale, prog[(b + rotate) % len(prog)]
+                                          + d * 2) + (12 if e >= 4 else 0)
                     song.add(t0 + e * 0.5 * beat,
-                             _arp_note(_hz(semi), beat * 0.5), 0.17)
-            else:
-                for e in (0, 2, 4, 6):
-                    semi = root + chord[e // 2 % 3] + 12
-                    song.add(t0 + e * 0.5 * beat,
-                             _arp_note(_hz(semi), beat * 0.5), 0.13)
+                             _arp_note(_hz(semi), beat * 0.5),
+                             0.13 if sparse else 0.17)
 
             # --- pulse one: the tune -------------------------------------
+            # Over four bars, not two: motif, motif answered, so a phrase is
+            # eight bars long and does not come back every three seconds.
             phrase = motif if (b % 4) < 2 else answer
             if b % 2 == 0:
                 t = 0.0
-                for d, length in phrase:
+                for i, (d, length) in enumerate(phrase):
                     if t >= 8.0:
                         break
                     semi = root + _degree(scale, d + transpose) + 12 + octave_up

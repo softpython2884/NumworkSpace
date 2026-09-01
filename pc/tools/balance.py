@@ -170,6 +170,26 @@ def main(argv):
               % ("VOID %d" % (sec - 4) if sec > 4 else "sector %d" % (sec + 1),
                  len(kinds), ", ".join(names[k] for k in fresh) or "-"))
 
+    # A figure that does not depend on the pilot at all: how long a boss
+    # survives someone who lands every shot. This is the number the game is
+    # tuned on, because the test pilot is a dodger -- it holds its line on a
+    # boss about 31% of the time -- and tuning to that is what let a sector-5
+    # boss die in under four seconds to anybody who aimed.
+    print("\n=== boss hit points, against a player who lands everything ===")
+    print("%-9s %10s %9s %11s" % ("sector", "boss hp", "dps", "seconds"))
+    for sec in (0, 2, 4, 5):
+        run = test_run.Run(1, 1, seed=1)
+        run.sector = sec
+        for u in (data.U_DMG, data.U_SPREAD, data.U_RATE):
+            run.upgrades[u] = min(3, sec)
+        c = test_run.Combat(run, data.N_BOSS, test_run.ART)
+        rate = 0.16 * (0.85 ** run.upgrades[data.U_RATE])
+        barrels = len(test_run.ent.SPREADS[min(run.upgrades[data.U_SPREAD], 3)])
+        dps = (1 + run.upgrades[data.U_DMG]) * barrels / rate
+        print("%-9s %10d %9.1f %10.1fs"
+              % ("VOID" if sec > 4 else "sector %d" % (sec + 1),
+                 c.boss.max_hp, dps, c.boss.max_hp / dps))
+
     print("\n=== fights (%d seeds per tier) ===" % len(seeds))
     print("%-7s %6s %8s %9s %8s %10s %8s" %
           ("tier", "won", "boss hp", "dmg taken", "no dmg", "boss secs",

@@ -62,8 +62,15 @@ def rare_paths(audio):
     for _ in range(6):
         combat.update(1 / 60.0, {"move0": (0, 0), "bomb": False})
 
-    # a boss, so its warning stinger fires
-    Combat(run, data.N_BOSS, art, audio)
+    # a boss, so its warning stinger fires -- and then killed outright, so
+    # explode_big fires too. Killing one used to happen by itself in a scripted
+    # run; bosses now take twenty-odd seconds of accurate fire and the test
+    # pilot is not accurate, so this joins the other rare paths.
+    boss_fight = Combat(run, data.N_BOSS, art, audio)
+    boss_fight.intro_t = 0.0
+    boss_fight.boss.shield_t = 0.0
+    boss_fight.boss.hp = 1
+    boss_fight.kill_boss()
 
     # menu refusal, sector clear and the losing run: state transitions a
     # scripted winner never reaches

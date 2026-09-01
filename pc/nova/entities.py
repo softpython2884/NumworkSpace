@@ -56,25 +56,28 @@ class EnemyBullet:
                 and data.PLAY_L - 20 < self.x < data.PLAY_R + 20)
 
 
-class EnemyBeam:
-    """A lancer's beam: LANCE's mechanic, bolted to something you can kill.
+class LinkBeam:
+    """A beam strung between two ships, one at each wall.
 
-    Same contract as the boss's -- it locks where it aimed when the charge
-    began, so it is always dodgeable and never arbitrary -- but it hangs off a
-    mortal ship. Kill the lancer mid-charge and the beam goes with it, which is
-    the whole reason for putting a boss attack on a regular enemy: it turns
-    into a target priority instead of a weather condition.
+    The first version was vertical: a lancer sat in the middle of the arena and
+    fired downwards, so the beam started nowhere and stopped at the floor. It
+    looked cut off because it *was* cut off -- a beam with one end hanging in
+    space reads as a rendering mistake rather than a weapon.
+
+    Two emitters dock at opposite walls and stretch it between them. Both ends
+    are now attached to something, the span covers the whole arena, and killing
+    either emitter drops it: the pair is the mechanic, and breaking the link is
+    the counterplay.
     """
 
-    CHARGE = 0.85
-    FIRE = 0.5
-    FADE = 0.2
-    WIDTH = 9
+    CHARGE = 1.0
+    FIRE = 0.55
+    FADE = 0.22
+    HEIGHT = 9
 
-    __slots__ = ("x", "y", "t")
+    __slots__ = ("y", "t")
 
-    def __init__(self, x, y):
-        self.x = x
+    def __init__(self, y):
         self.y = y
         self.t = 0.0
 
@@ -90,28 +93,29 @@ class EnemyBeam:
         return self.t >= self.CHARGE + self.FIRE + self.FADE
 
     def rect(self):
-        half = self.WIDTH / 2
-        return (self.x - half, self.y, self.WIDTH, data.BOT - self.y)
+        half = self.HEIGHT / 2
+        return (data.PLAY_L, self.y - half, data.PLAY_R - data.PLAY_L,
+                self.HEIGHT)
 
     def draw(self, surf):
-        top = int(self.y)
-        h = data.BOT - top
-        if h <= 0:
-            return
+        x0, w = data.PLAY_L, data.PLAY_R - data.PLAY_L
+        y = int(self.y)
         if self.t < self.CHARGE:
+            # A thread between the two ships, pulsing faster as it fills. The
+            # telegraph is the mechanic: you are meant to leave the band, and
+            # you can only do that if you can see where the band is.
             frac = self.t / self.CHARGE
             if int(self.t * (7 + 20 * frac)) % 2:
-                w = max(1, int(1 + frac * 3))
-                surf.fill(data.ORANGE, (int(self.x - w / 2), top, w, h))
+                h = max(1, int(1 + frac * 3))
+                surf.fill(data.ORANGE, (x0, y - h // 2, w, h))
             return
         if self.firing:
-            w = self.WIDTH
-            surf.fill(data.ORANGE, (int(self.x - w / 2), top, w, h))
-            surf.fill(data.WHITE, (int(self.x - 2), top, 4, h))
+            surf.fill(data.ORANGE, (x0, y - self.HEIGHT // 2, w, self.HEIGHT))
+            surf.fill(data.WHITE, (x0, y - 2, w, 4))
             return
         frac = 1.0 - (self.t - self.CHARGE - self.FIRE) / self.FADE
-        w = max(1, int(self.WIDTH * frac * 0.5))
-        surf.fill(data.ORANGE, (int(self.x - w / 2), top, w, h))
+        h = max(1, int(self.HEIGHT * frac * 0.5))
+        surf.fill(data.ORANGE, (x0, y - h // 2, w, h))
 
 
 class Pickup:
@@ -243,7 +247,8 @@ SPREADS = (
 class Enemy:
     __slots__ = ("x", "y", "kind", "hp", "max_hp", "t", "fire_t", "anchor",
                  "drift", "w", "h", "flash", "phase", "score", "rng",
-                 "beam", "dash_t", "dash_vx", "dash_vy")
+                 "beam", "dash_t", "dash_vx", "dash_vy",
+                 "side", "partner")
 
     def __init__(self, kind, x, y, hp, sector, rng=None):
         self.kind = kind
@@ -261,7 +266,9 @@ class Enemy:
         self.phase = 0
         self.score = data.ENEMY_SCORE[kind]
         self.w, self.h = ENEMY_SIZE[kind]
-        self.beam = None                 # lancers only
+        self.beam = None                 # the left emitter of a pair owns it
+        self.side = 0                    # -1 docked left, +1 docked right
+        self.partner = None
         self.dash_t = 0.0                # phantoms only
         self.dash_vx = 0.0
         self.dash_vy = 0.0
@@ -289,26 +296,24 @@ class Enemy:
                 self.y += 11 * dt
                 self.x += math.sin(self.t * 1.1) * 26 * dt
         elif k == data.LANCER_ID:
-            # Slides to its station, then works a charge-fire cycle. It never
-            # descends past the anchor: a beam is only fair if you can see
-            # where it will be, and one falling on top of you is not that.
-            if self.y < self.anchor:
-                self.y += speed * dt
-            else:
-                self.x += math.sin(self.t * 0.9) * 22 * dt
-                self.anchor += 6 * dt
-                self.y += 6 * dt
+            # Welded to its wall and sinking. Only the left one of a pair runs
+            # the charge cycle, and only while its partner is alive -- kill
+            # either end and the beam it was about to string never arrives.
+            self.x = data.PLAY_L + 8 if self.side < 0 else data.PLAY_R - 8
+            self.y += speed * dt
+            partner_ok = self.partner is not None and self.partner.hp > 0
             if self.beam is not None:
-                # The beam does not follow the ship: it stays where it aimed
-                # when the charge began, which is the whole telegraph.
                 self.beam.update(dt)
-                if self.beam.done:
+                if self.beam.done or not partner_ok:
                     self.beam = None
-                    self.fire_t = self.rng.uniform(1.3, 2.1)
-            else:
+                    self.fire_t = self.rng.uniform(1.4, 2.2)
+            elif self.side < 0 and partner_ok:
+                # Both ends have to be on screen, or the beam would come out
+                # of the ceiling from a ship nobody has seen yet.
                 self.fire_t -= dt
-                if self.fire_t <= 0 and self.y > data.TOP + 8:
-                    self.beam = EnemyBeam(target_x, self.y + 6)
+                if (self.fire_t <= 0 and self.y > data.TOP + 14
+                        and self.partner.y > data.TOP + 14):
+                    self.beam = LinkBeam((self.y + self.partner.y) * 0.5)
         elif k == data.SPINNER_ID:
             # Drifts in slowly and turns. Its rings are the one attack in the
             # roster that does not care where you are, which is what makes it

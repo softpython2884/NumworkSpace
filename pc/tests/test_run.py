@@ -24,6 +24,15 @@ from nova.game import (COMBAT, EVENT, GAMEOVER, INTERLUDE, MAP, REST, TITLE,
 
 DT = 1 / 60.0
 
+# Shared by tools/balance.py, which builds a Combat directly to read boss hit
+# points without playing a fight.
+from nova import entities as ent          # noqa: E402
+from nova.art import Art                  # noqa: E402
+from nova.combat import Combat            # noqa: E402
+from nova.run import Run                  # noqa: E402
+
+ART = Art()
+
 
 def press(game, key):
     game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=key, mod=0))

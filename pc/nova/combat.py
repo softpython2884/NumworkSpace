@@ -94,18 +94,27 @@ class Combat:
             self.tag = "S%d-%d" % (sector + 1, run.node + 1)
 
     def boss_hp(self):
-        """Scaled to the guns the player actually brought: a flat pool is a few
-        seconds against a maxed build and several minutes against a stock one."""
+        """Scaled to the guns the player actually brought.
+
+        The coefficient is literally seconds of sustained, every-shot-lands
+        fire. It was 2.6 -- which is how a sector-5 boss with 306 hit points
+        died in under four seconds to a maxed ship parked underneath it, and
+        why it got *worse* as the ship improved: the term that scales with your
+        damage was the small one.
+
+        It looked fine for a long time because the bench was lying. The test
+        pilot lands 6 to 8% of its own gun on a late boss; it dodges rather
+        than aims, so a 45-second fight in the bench was a 4-second fight in
+        the game. The pilot aims now, and this is set for someone who does:
+        twelve seconds of perfect fire at sector 1, rising to twenty-four deep
+        in the Void.
+        """
         up = self.run.upgrades
         rate = 0.16 * (0.85 ** up[data.U_RATE])
         barrels = len(ent.SPREADS[min(up[data.U_SPREAD], 3)])
         dps = (1 + up[data.U_DMG]) * barrels / rate
-        # Deliberately shorter than it was. The patterns take far more dodging
-        # than they used to, so the same pool of hit points bought an 80-second
-        # fight instead of a 30-second one -- and a dense pattern held for 80
-        # seconds stops being a fight you read and becomes one you survive by
-        # arithmetic.
-        return int(40 + self.run.sector * 16 + dps * 2.6)
+        seconds = 8.0 + min(self.run.sector, 5) * 1.5
+        return int(40 + self.run.sector * 16 + dps * seconds)
 
     # -- helpers ----------------------------------------------------------
     def live_players(self):
@@ -129,6 +138,21 @@ class Combat:
         kind = self.rng.choice(self.pool)
         self.budget -= data.ENEMY_COST[kind]
         hp = data.ENEMY_HP[kind] + self.run.sector
+        if kind == data.LANCER_ID:
+            # A pair, one per wall, linked. They only mean anything together:
+            # the beam is strung between them and dies with either one.
+            y = data.TOP - 14
+            left = ent.Enemy(kind, data.PLAY_L + 8, y, hp, self.run.sector,
+                             self.rng)
+            right = ent.Enemy(kind, data.PLAY_R - 8, y, hp, self.run.sector,
+                              self.rng)
+            left.side, right.side = -1, 1
+            left.partner, right.partner = right, left
+            self.enemies.append(left)
+            self.enemies.append(right)
+            self.budget -= data.ENEMY_COST[kind]      # two ships, two costs
+            self.spawn_t = max(0.5, 1.4 - self.run.sector * 0.06)
+            return
         x = self.rng.uniform(data.PLAY_L + 24, data.PLAY_R - 24)
         e = ent.Enemy(kind, x, data.TOP - 14, hp, self.run.sector, self.rng)
         self.enemies.append(e)

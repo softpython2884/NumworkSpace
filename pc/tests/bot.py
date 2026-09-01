@@ -31,7 +31,18 @@ MOVES = ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1),
 HORIZON = 0.5        # seconds of future to look at
 CLEAR = 15.0         # a bullet passing closer than this is a problem
 CONSIDER = 150.0     # ignore bullets further away than this
-AIM = 0.25           # weight on lining up with the target
+AIM = 1.6            # weight on lining up with the target
+
+# That weight is the difference between a pilot and a pacifist. At 0.25 the
+# danger term dwarfed it whenever anything was on screen, so the pilot dodged
+# beautifully and hardly fired on the boss, and balance tuned against that is
+# balance tuned for a player who does not shoot -- which is how a boss ended up
+# dying in four seconds to anybody who did.
+#
+# Do not read the raw "damage dealt over theoretical dps" figure as accuracy,
+# though. BULWARK and WARDEN quarter every hit while their pods stand, so that
+# ratio cannot exceed 25% on two of the five bosses however well the pilot
+# shoots. Chasing it as if it were aim was a wasted afternoon.
 
 
 class Bot:
@@ -69,8 +80,10 @@ class Bot:
         # which is exactly the mistake the repulsion field made.
         for e in self.c.enemies:
             b = e.beam
-            if b is not None and b.t > b.CHARGE * 0.45 and b.y < me.y:
-                out.append((b.x, me.y, 0.0, 0.0, b.WIDTH * 0.5 + 8.0))
+            if b is not None and b.t > b.CHARGE * 0.45:
+                # A horizontal band: model it at the pilot's own x, so the
+                # only way out of it is up or down, which is the truth.
+                out.append((me.x, b.y, 0.0, 0.0, b.HEIGHT * 0.5 + 9.0))
         return out
 
     def cost(self, px, py, vx, vy, threats):
@@ -119,6 +132,11 @@ class Bot:
             if pods:
                 want_x = min(pods, key=lambda p: abs(p.x - me.x)).x
             pull = 1.0
+            # "Commit during the venting window" seemed obvious and measured
+            # backwards: alignment went from 31% overall to 11% during the
+            # lull. The lull is not quiet -- it is when the volley just fired
+            # is crossing the arena, so it is the most dangerous moment to
+            # stand still in, and the pilot was right to leave.
         best = None
         for pk in c.pickups:
             d = math.hypot(pk.x - me.x, pk.y - me.y)
