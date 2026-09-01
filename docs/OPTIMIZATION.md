@@ -33,6 +33,14 @@ dichotomie le plus petit tas capable de le charger.
 C'est l'outil qui manquait la première fois. Il est désormais dans le dépôt, et
 c'est lui qui a la dernière parole, pas la taille des fichiers.
 
+Il a aussi fallu qu'il tourne. Le port unix de MicroPython 1.17 réclame par
+défaut deux sous-modules git — axtls pour `ussl`, berkeley-db pour `btree` — que
+`git clone --depth 1` ne rapporte pas : en local le tas de travail les avait,
+en CI le build échouait dès la première seconde, et la mesure était sautée sans
+que personne le remarque. Epsilon n'embarque ni l'un ni l'autre, alors le build
+les désactive : la compilation passe de « à réparer à la main » à quinze
+secondes, et la mesure tourne à chaque commit.
+
 Le build local est en 64 bits, donc ses pointeurs sont deux fois plus larges que
 ceux du ARM 32 bits de la calculatrice ; l'arbre syntaxique, qui est presque
 entièrement fait de pointeurs, coûte environ 1,6 fois plus ici. Le budget de

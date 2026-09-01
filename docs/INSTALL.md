@@ -33,7 +33,7 @@ objets, **et l'arbre syntaxique du module en cours de compilation**. Le dépôt
 mesure donc pour de vrai, sur le vrai interpréteur :
 
 ```bash
-tools/mp/build.sh          # compile MicroPython 1.17, une fois (~2 min)
+tools/mp/build.sh          # compile MicroPython 1.17, une fois (~15 s)
 python3 tools/memcheck.py  # cherche le plus petit tas qui charge le jeu
 ```
 
