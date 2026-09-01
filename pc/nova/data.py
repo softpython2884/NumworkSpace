@@ -210,7 +210,12 @@ aaaaaaaaa
 ....a.ddd
 """.strip("\n")
 
-BOSS = """
+# --- bosses --------------------------------------------------------------
+# One per sector, each with its own silhouette and its own trick. Drawn as the
+# left half plus the centre column, like everything else.
+
+# 1. SENTINEL -- a gun platform. Fans of shots, nothing clever.
+BOSS_SENTINEL = """
 .........aaaaaaaaaa
 .......aaaaaaaaaaaa
 .....aaaaaaaaaaaaaa
@@ -228,6 +233,110 @@ aaddaaaaaaaddddddaa
 .....dd...aaaaaaaaa
 ..........aaaddddaa
 ...........aadddd.a
+""".strip("\n")
+
+# 2. HIVE -- a carrier. Opens its bays and sends escorts at you.
+BOSS_HIVE = """
+......aaaaaaaaaaaaa
+....aaaaaaaaaaaaaaa
+..aaaaaaaaaaaaaaaaa
+.aaaaaaaaaaaaaaaaaa
+aaaaawwwaaaaawwwaaa
+aaaawwwwwaaawwwwwaa
+aaaawwwwwaaawwwwwaa
+aaaaawwwaaaaawwwaaa
+aaaaaaaaaaaaaaaaaaa
+aaddddaaaaaaddddaaa
+aaddddaaaaaaddddaaa
+aaddddaaaaaaddddaaa
+.aaaaaaaaaaaaaaaaaa
+..aaaaaaaaaaaaaaaaa
+...aaaaaaaaaaaaaaaa
+.....aaaa...aaaaaaa
+.......d.....ddaaaa
+""".strip("\n")
+
+# 3. LANCE -- one enormous cannon. Telegraphs, then fires a beam.
+BOSS_LANCE = """
+............aaaaaaa
+..........aaaaaaaaa
+........aaaaaaaaaaa
+......aaaaaaaaaaaaa
+....aaaaaaaaaaaaaaa
+..aaaaaaaaawwwwwwaa
+.aaaaaaaaawwwwwwwaa
+aaaaaaaaaawwwwwwwaa
+aaaaaaaaaaaawwwwaaa
+.aaaaaaaaaaaaaaaaaa
+..aaaaaaaaaaaaaaaaa
+...aaaaaaaaddddddaa
+....aaaaaaaddddddaa
+.....aaaaaaddddddaa
+......aaaaaddddddaa
+.......aaaaddddddaa
+........aaaddddddaa
+.........aadddddd.a
+""".strip("\n")
+
+# 4. BULWARK -- a core behind two turret pods. Break the pods first.
+BOSS_BULWARK = """
+.......aaaaaaaaaaaa
+.....aaaaaaaaaaaaaa
+...aaaaaaaaaaaaaaaa
+..aaaaaaaaaaaaaaaaa
+.aaaaaaaaawwwwwwwaa
+.aaaaaaaawwwwwwwwwa
+aaaaaaaaawwwwwwwwwa
+aaaaaaaaaawwwwwwwaa
+aaaaaaaaaaaaaaaaaaa
+.aaaaaaaaaaaaaaaaaa
+..aaaaaaaaddddddaaa
+...aaaaaaaddddddaaa
+....aaaaaaaaaaaaaaa
+.....aaaaaaaaaaaaaa
+.......aaaa..aaaaaa
+.........d....ddaaa
+""".strip("\n")
+
+# 5. WARDEN -- everything at once. The campaign's last word.
+BOSS_WARDEN = """
+..........aaaaaaaaa
+........aaaaaaaaaaa
+......aaaaaaaaaaaaa
+....aaaaaawwwwwwwaa
+..aaaaaawwwwwwwwwaa
+.aaaaaawwwwwwwwwwaa
+aaaaaaawwwwwwwwwwaa
+aaaaaaaawwwwwwwwwaa
+aaddaaaaaawwwwwwaaa
+aaddaaaaaaaaaaaaaaa
+aaddaaaaddddddddaaa
+aaaaaaaaddddddddaaa
+.aaaaaaaddddddddaaa
+..aaaaaaddddddddaaa
+...aaaaaaaaaaaaaaaa
+....aaaaa..aaaaaaaa
+......dd....ddaaaaa
+.............ddd.aa
+""".strip("\n")
+
+BOSS_ART = (BOSS_SENTINEL, BOSS_HIVE, BOSS_LANCE, BOSS_BULWARK, BOSS_WARDEN)
+BOSS_NAME = ("SENTINEL", "HIVE MOTHER", "LANCE", "BULWARK", "WARDEN")
+BOSS_TELL = ("Fans of fire. Read the gaps.",
+             "It launches escorts. Cut them down.",
+             "It charges a beam. Do not be there.",
+             "Break the pods before the core.",
+             "All of it, at once.")
+
+# A turret pod: destructible, sits either side of BULWARK and WARDEN.
+BOSS_POD = """
+..aaaa
+.aawwa
+aawwwa
+aawwwa
+.aawwa
+..addd
+...aaa
 """.strip("\n")
 
 CRYSTAL = """
@@ -257,7 +366,7 @@ REPAIR_PAL = {"w": WHITE, "g": GREEN}
 # Enemies are tinted per sector at load time: 'a' is the accent, 'd' its dark
 # shade, 'w' stays white.
 GRUNT_ID, WEAVER_ID, TURRET_ID, RUSHER_ID, TANK_ID, BOSS_ID = range(6)
-ENEMY_ART = (GRUNT, WEAVER, TURRET, RUSHER, TANK, BOSS)
+ENEMY_ART = (GRUNT, WEAVER, TURRET, RUSHER, TANK, BOSS_SENTINEL)
 
 ENEMY_HP = (2, 2, 6, 2, 12, 1)
 ENEMY_SCORE = (10, 15, 25, 20, 40, 500)

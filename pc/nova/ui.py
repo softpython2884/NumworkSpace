@@ -96,6 +96,17 @@ def draw_hud(surf, art, run, tag, boss=None):
     text(surf, art, tag, data.W - 10, 8, data.GREY, right=True)
 
     if boss is not None and boss.hp > 0:
-        w = int(300 * max(0.0, boss.hp / boss.max_hp))
-        pygame.draw.rect(surf, data.DARK, (90, data.HUD_H + 4, 300, 4))
-        pygame.draw.rect(surf, data.RED, (90, data.HUD_H + 4, w, 4))
+        bar_w = min(300, data.PLAY_R - data.PLAY_L - 60)
+        x0 = (data.W - bar_w) // 2
+        y0 = data.HUD_H + 4
+        w = int(bar_w * max(0.0, boss.hp / boss.max_hp))
+        pygame.draw.rect(surf, data.DARK, (x0, y0, bar_w, 4))
+        # blue while armoured: the bar should say why shots are bouncing
+        pygame.draw.rect(surf, data.BLUE if boss.shielded else data.RED,
+                         (x0, y0, w, 4))
+        pods = getattr(boss, "pods", [])
+        for i, pod in enumerate(pods):
+            px = x0 + bar_w + 6 + i * 8
+            pygame.draw.rect(surf, data.BLUE if pod.alive else data.DARK,
+                             (px, y0 - 1, 6, 6), 0 if pod.alive else 1)
+

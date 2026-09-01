@@ -1,2 +1,5 @@
-pygame>=2.5
-numpy>=1.21     # sound synthesis; the game runs silently without it
+# pygame-ce is the community fork: same `import pygame`, but it ships wheels
+# for new Python releases months before upstream does. Either works.
+pygame-ce>=2.4; python_version >= "3.12"
+pygame>=2.5; python_version < "3.12"
+numpy>=1.21          # sound synthesis; the game runs silently without it

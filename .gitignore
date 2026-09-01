@@ -12,3 +12,7 @@ tools/mp/micropython-src/
 tools/mp/work/
 tools/mp/stubs/_probe.py
 pc/**/__pycache__/
+pc/.venv/
+pc/build/
+pc/dist/
+pc/*.spec.bak

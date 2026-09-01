@@ -69,10 +69,17 @@ class Art:
             self.enemies.append(row)
             self.enemy_flash.append([white_out(s) for s in row])
 
-        # The boss always reads as a threat, whatever the sector.
+        # Bosses always read as a threat, whatever the sector's accent is.
         boss_pal = {"a": data.RED, "d": data.RED_D, "w": data.WHITE}
-        self.boss = build_sprite(data.BOSS, boss_pal)
-        self.boss_flash = white_out(self.boss)
+        self.bosses = [build_sprite(art, boss_pal) for art in data.BOSS_ART]
+        self.boss_flashes = [white_out(s) for s in self.bosses]
+        self.pod = build_sprite(data.BOSS_POD, boss_pal)
+        self.pod_flash = white_out(self.pod)
+        self.pod_dead = build_sprite(
+            data.BOSS_POD, {"a": data.DARK, "d": data.DARK, "w": data.DARK})
+        # kept for the plain enemy table, which still lists a boss at index 5
+        self.boss = self.bosses[0]
+        self.boss_flash = self.boss_flashes[0]
 
         self.font = None
         self.font_big = None
@@ -84,6 +91,10 @@ class Art:
         self.font = pygame.font.SysFont("dejavusansmono,couriernew,monospace", 11)
         self.font_big = pygame.font.SysFont("dejavusansmono,couriernew,monospace",
                                             26, bold=True)
+
+    def boss_surface(self, index, flashing=False):
+        i = index % len(self.bosses)
+        return (self.boss_flashes if flashing else self.bosses)[i]
 
     def enemy_surface(self, sector, kind, flashing=False):
         if kind == data.BOSS_ID:

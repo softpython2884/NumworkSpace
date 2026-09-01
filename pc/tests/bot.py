@@ -36,14 +36,20 @@ class Bot:
                 dy -= (e.y - me.y) / max(d, 1) * w
 
         # A boss is too big to ever be "safe"; drift under it anyway, or the
-        # bot dodges forever and never fires on it.
-        boss = None
-        for e in c.enemies:
-            if e.w > 30:
-                boss = e
+        # bot dodges forever and never fires on it. Aim at a live pod first --
+        # the core is armoured until they are gone.
+        boss = getattr(c, "boss", None)
         if boss is not None:
-            dx += (boss.x - me.x) / 60.0
+            target_x = boss.x
+            pods = [p for p in getattr(boss, "pods", []) if p.alive]
+            if pods:
+                target_x = min(pods, key=lambda p: abs(p.x - me.x)).x
+            dx += (target_x - me.x) / 60.0
             dy += 0.25
+            # step out of a charging or firing beam
+            for beam in getattr(boss, "beams", []):
+                if abs(beam.x - me.x) < beam.width:
+                    dx += 2.5 if me.x > beam.x else -2.5
 
         if danger < 0.25:
             # nothing pressing: grab loot, else get under a target

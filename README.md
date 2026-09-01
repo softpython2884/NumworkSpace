@@ -21,16 +21,19 @@ Un rogue-lite spatial, en deux éditions :
 
 ## Édition PC
 
-```bash
-cd pc && pip install pygame && python3 nova.py
-```
+**Windows** : double-clic sur `pc/play.cmd` · **Linux/macOS** : `./pc/play.sh`
+
+Le script installe tout (pygame-ce, numpy) dans un environnement isolé et lance
+le jeu. `pc/build_exe.cmd` en fait un `.exe` autonome avec icône.
 
 | | |
 |---|---|
 | ![Carte de secteur](docs/img/pc-02-map.png) | ![Boss](docs/img/pc-04-boss.png) |
-| La carte de secteur à embranchements | Boss en phase 2 |
+| La carte de secteur à embranchements | Un des cinq boss |
 
-Déplacement 8 directions, tir automatique, coop 2 joueurs sur le même clavier.
+Déplacement 8 directions, tir automatique, coop 2 joueurs (clavier et/ou
+manette), **cinq boss** aux mécaniques distinctes — rayons, escortes, modules
+destructibles.
 Zoom toujours entier, arène de taille fixe quelle que soit la résolution, et
 20 effets sonores synthétisés au démarrage (aucun fichier audio) —
 [à écouter](docs/nova-sound-demo.wav). Tout est dans

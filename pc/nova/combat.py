@@ -10,6 +10,7 @@ import random
 
 import pygame
 
+from . import boss as boss_mod
 from . import data
 from .ui import text as _text
 from . import entities as ent
@@ -57,6 +58,7 @@ class Combat:
         self.hitstop = 0.0
         self.spawn_t = 1.1
         self.boss = None
+        self.intro_t = 0.0
         self.tag = ""
         self.time = 0.0
         self.ended_t = 0.0
@@ -73,11 +75,12 @@ class Combat:
 
         if self.is_boss:
             self.budget = 0
-            hp = self.boss_hp()
-            self.boss = ent.Enemy(data.BOSS_ID, (data.PLAY_L + data.PLAY_R) / 2,
-                                  data.TOP - 20, hp, sector)
-            self.enemies.append(self.boss)
-            self.tag = "WARLORD"
+            # One boss per sector, cycling once the campaign is behind you.
+            self.boss = boss_mod.Boss(sector, sector, self.boss_hp(),
+                                      (data.PLAY_L + data.PLAY_R) / 2,
+                                      data.TOP - 20)
+            self.tag = self.boss.name
+            self.intro_t = 2.6
             self.audio.play("boss_warn")
         else:
             self.tag = "S%d-%d" % (sector + 1, run.node + 1)
@@ -116,6 +119,16 @@ class Combat:
         self.enemies.append(e)
         gap = max(0.28, 0.85 - self.run.sector * 0.06) * self.rng.uniform(0.6, 1.4)
         self.spawn_t = gap
+
+    def spawn_escort(self, kind, x, y):
+        """A boss launching an escort. Weaker than a spawned wave enemy: they
+        arrive in numbers and the boss is the real fight."""
+        hp = max(1, data.ENEMY_HP[kind] + self.run.sector - 1)
+        e = ent.Enemy(kind, max(data.PLAY_L + 12, min(data.PLAY_R - 12, x)),
+                      y, hp, self.run.sector)
+        e.score = data.ENEMY_SCORE[kind] // 2
+        self.enemies.append(e)
+        self.particles.burst(x, y, 10, 90, (data.WHITE, data.ORANGE), 0.3)
 
     def kill_enemy(self, e):
         """Score, salvage and a proper explosion."""
@@ -230,11 +243,21 @@ class Combat:
                                            + self.run.fire_bonus))
                 self.audio.play("enemy_shoot", 0.55, throttle=0.06)
 
+        if self.boss is not None:
+            if self.intro_t > 0:
+                # hold fire while the name card is up
+                self.intro_t -= dt
+                self.boss.move(dt, self)
+                self.boss.t = 0.0
+            else:
+                self.boss.update(dt, self)
+
         targets = self.live_players()
         for pk in self.pickups:
             pk.update(dt, up[data.U_MAGNET], targets)
 
         self.collide()
+        self.collide_boss()
         self.spawn_wave(dt)
 
         self.bullets = [b for b in self.bullets if b.alive]
@@ -246,7 +269,7 @@ class Combat:
             self.result = False
             return
 
-        cleared = (not self.enemies) if self.is_boss else (
+        cleared = (self.boss is None) if self.is_boss else (
             self.budget <= 0 and not self.enemies and not self.shots)
         if cleared:
             # Hold the scene open for a moment so the salvage can be collected
@@ -257,6 +280,82 @@ class Combat:
                 self.result = True
         else:
             self.ended_t = 0.0
+
+    def collide_boss(self):
+        """Player shots against the boss and its pods, and its beams against
+        the player. Pods are hit-tested first: they are in front, and hitting
+        the armoured core when you meant to hit a pod feels like a cheat."""
+        b = self.boss
+        if b is None:
+            return
+        for shot in self.bullets:
+            if shot.y < data.TOP - 10:
+                continue
+            box = (shot.x - 1, shot.y - 3, shot.w, shot.h)
+            hit = None
+            for pod in b.live_pods():
+                if ent.overlaps(box, pod.rect()):
+                    hit = pod
+                    break
+            if hit is not None:
+                hit.hp -= shot.dmg
+                hit.flash = 0.08
+                self.audio.play("hit", 0.5, throttle=0.03)
+                self.particles.burst(shot.x, shot.y, 4, 90,
+                                     (data.WHITE, data.YELLOW), 0.2, 1)
+                if hit.hp <= 0:
+                    self.audio.play("explode", 0.9)
+                    self.particles.burst(hit.x, hit.y, 26, 170,
+                                         (data.WHITE, data.ORANGE, data.RED),
+                                         0.7, 2)
+                    self.shake.kick(6.0)
+                if not shot.pierce:
+                    shot.y = -999
+                continue
+            if id(b) in shot.hit:
+                continue
+            if ent.overlaps(box, b.rect()):
+                dealt = b.take_hit(shot.dmg)
+                self.audio.play("hit", 0.5 if dealt > 1 else 0.3, throttle=0.03)
+                self.particles.burst(
+                    shot.x, shot.y, 4 if dealt > 1 else 2, 90,
+                    (data.WHITE, data.YELLOW) if dealt > 1 else (data.BLUE,),
+                    0.2, 1)
+                if b.hp <= 0:
+                    self.kill_boss()
+                    return
+                if shot.pierce:
+                    shot.hit.add(id(b))
+                else:
+                    shot.y = -999
+
+        for p in self.live_players():
+            pr = p.rect()
+            if ent.overlaps(pr, b.rect()):
+                self.hurt_player(p)
+            for beam in b.beams:
+                if beam.firing and ent.overlaps(pr, beam.rect(data.TOP)):
+                    self.hurt_player(p)
+
+    def kill_boss(self):
+        b = self.boss
+        self.run.score += b.score
+        self.audio.play("explode_big")
+        self.flash.pop(data.WHITE, 0.75)
+        self.shake.kick(12.0)
+        colours = (data.WHITE, data.YELLOW, data.ORANGE, data.RED)
+        self.particles.burst(b.x, b.y, 70, 300, colours, 1.0, 2)
+        self.particles.burst(b.x, b.y, 30, 140, (data.GREY, data.DARK), 1.3, 1,
+                             drag=1.2, gravity=40)
+        for _ in range(16):
+            self.pickups.append(ent.Pickup(b.x + self.rng.uniform(-30, 30),
+                                           b.y + self.rng.uniform(-10, 10)))
+        # escorts do not outlive their carrier
+        for e in list(self.enemies):
+            self.kill_enemy(e)
+        self.enemies.clear()
+        self.shots.clear()
+        self.boss = None
 
     def collide(self):
         run = self.run
@@ -332,6 +431,9 @@ class Combat:
             surf.blit(img, (int(e.x) - img.get_width() // 2,
                             int(e.y) - img.get_height() // 2))
 
+        if self.boss is not None:
+            self.boss.draw(surf, a)
+
         self.particles.draw(surf)
 
         for b in self.bullets:
@@ -357,7 +459,27 @@ class Combat:
 
         self.mask_margins(surf)
         self.draw_side_panel(surf)
+        if self.intro_t > 0 and self.boss is not None:
+            self.draw_intro(surf)
         self.flash.draw(surf)
+
+    def draw_intro(self, surf):
+        """Name the boss and say what it does. A fight you have never seen
+        should not open with a surprise you could not have read."""
+        b = self.boss
+        y = data.TOP + (data.BOT - data.TOP) // 2
+        fade = min(1.0, self.intro_t / 0.5)
+        band = pygame.Surface((data.PLAY_R - data.PLAY_L, 44), pygame.SRCALPHA)
+        band.fill((0, 0, 0, int(190 * fade)))
+        surf.blit(band, (data.PLAY_L, y - 22))
+        pygame.draw.line(surf, data.RED, (data.PLAY_L, y - 22),
+                         (data.PLAY_R, y - 22))
+        pygame.draw.line(surf, data.RED, (data.PLAY_L, y + 21),
+                         (data.PLAY_R, y + 21))
+        _text(surf, self.art, b.name, (data.PLAY_L + data.PLAY_R) // 2, y - 16,
+              data.RED, centre=True, big=True)
+        _text(surf, self.art, b.tell, (data.PLAY_L + data.PLAY_R) // 2, y + 4,
+              data.GREY, centre=True)
 
     def draw_frame(self, surf):
         """Rails either side of the arena, so the playable width reads as

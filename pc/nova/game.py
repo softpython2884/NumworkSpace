@@ -12,6 +12,7 @@ import pygame
 from . import data, sector, ui
 from .art import Art
 from .audio import Audio
+from .gamepad import Pads
 from .combat import Combat
 from .fx import Flash, Particles, Starfield, make_crt
 from .run import Run
@@ -23,6 +24,7 @@ class Game:
     def __init__(self, scale=3, fullscreen=False, crt=True, sound=True):
         pygame.init()
         self.audio = Audio(sound)
+        self.pads = Pads()
         pygame.display.set_caption("NOVA")
         self.scale = scale
         self.auto_scale = scale is None
@@ -289,22 +291,38 @@ class Game:
         return dx, dy
 
     def combat_inputs(self):
+        """Keyboard and pads are both live, always.
+
+        A player's direction is whichever input is actually pushing; in co-op
+        that lets one person hold a controller while the other uses the keys.
+        """
         keys = pygame.key.get_pressed()
-        inp = {"bomb": keys[pygame.K_SPACE] or keys[pygame.K_LSHIFT]}
+        bomb = keys[pygame.K_SPACE] or keys[pygame.K_LSHIFT]
+        inp = {}
         if self.players > 1:
             # split the keyboard: P1 on the arrows, P2 on WASD
-            inp["move0"] = (keys[pygame.K_RIGHT] - keys[pygame.K_LEFT],
-                            keys[pygame.K_DOWN] - keys[pygame.K_UP])
-            inp["move1"] = (keys[pygame.K_d] - keys[pygame.K_a],
-                            keys[pygame.K_s] - keys[pygame.K_w])
+            moves = [(keys[pygame.K_RIGHT] - keys[pygame.K_LEFT],
+                      keys[pygame.K_DOWN] - keys[pygame.K_UP]),
+                     (keys[pygame.K_d] - keys[pygame.K_a],
+                      keys[pygame.K_s] - keys[pygame.K_w])]
         else:
-            inp["move0"] = self.movement(keys, 0)
+            moves = [self.movement(keys, 0)]
+        for i, (dx, dy) in enumerate(moves):
+            px, py = self.pads.direction(i)
+            inp["move%d" % i] = (px or dx, py or dy)
+            bomb = bomb or self.pads.bomb(i)
+        inp["bomb"] = bomb
         return inp
 
     def handle_event(self, e):
         if e.type == pygame.QUIT:
             self.running = False
             return
+        if self.pads.handle_event(e):
+            return
+        if e.type in (pygame.JOYBUTTONDOWN, pygame.JOYHATMOTION,
+                      pygame.JOYAXISMOTION):
+            return          # pads are polled, not event-driven
         if e.type == pygame.VIDEORESIZE and not self.fullscreen:
             self.resize((max(320, e.w), max(200, e.h)))
             return
@@ -402,9 +420,19 @@ class Game:
             self.audio.play("menu_no")
 
     # -- update / draw ----------------------------------------------------
+    def pad_menu(self):
+        """Turn pad presses into the key events the menus already understand,
+        so there is exactly one place that knows what a menu does."""
+        for edge in self.pads.menu_edges():
+            key = {"up": pygame.K_UP, "down": pygame.K_DOWN,
+                   "confirm": pygame.K_RETURN, "back": pygame.K_BACKSPACE}[edge]
+            self.handle_event(pygame.event.Event(pygame.KEYDOWN, key=key, mod=0))
+
     def update(self, dt):
         self.t += dt
         self.flash.update(dt)
+        if self.state != COMBAT:
+            self.pad_menu()
         if self.state == COMBAT:
             self.combat.update(dt, self.combat_inputs())
             if self.combat.result is not None:
@@ -461,6 +489,11 @@ class Game:
         ui.text(c, self.art,
                 "F11 fullscreen   F1 CRT   M mute   +/- size",
                 data.W // 2, data.H - 14, data.DARK, centre=True)
+        if self.pads.count:
+            label = "%d gamepad%s ready" % (self.pads.count,
+                                            "s" if self.pads.count > 1 else "")
+            ui.text(c, self.art, label, data.W // 2, data.H - 28, data.GREEN,
+                    centre=True)
 
     def draw_trader(self, c):
         if self.free_pick:

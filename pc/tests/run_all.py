@@ -8,6 +8,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 SUITE = [("full runs", "test_run.py"),
          ("sound catalogue", "test_audio.py"),
+         ("gamepad mapping", "test_gamepad.py"),
          ("frame budget", "test_perf.py")]
 
 

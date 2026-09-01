@@ -16,15 +16,18 @@ from nova import data
 art = Art()
 art.load_fonts()
 
-ZOOM = 6
+ZOOM = 5
 items = [("player 1", art.players[0]), ("player 2", art.players[1]),
          ("crystal", art.crystal), ("repair", art.repair)]
-names = ("grunt", "weaver", "turret", "rusher", "tank", "boss")
+names = ("grunt", "weaver", "turret", "rusher", "tank")
 for i, n in enumerate(names):
     items.append((n, art.enemy_surface(2, i)))
+items.append(("pod", art.pod))
+for i, n in enumerate(data.BOSS_NAME):
+    items.append((n.lower(), art.bosses[i]))
 
 pad = 14
-cols = 5
+cols = 6
 cw = max(s.get_width() for _, s in items) * ZOOM + pad * 2
 ch = max(s.get_height() for _, s in items) * ZOOM + pad * 2 + 16
 rows = (len(items) + cols - 1) // cols
