@@ -11,6 +11,7 @@ import pygame
 
 from . import data, sector, ui
 from .art import Art
+from .audio import Audio
 from .combat import Combat
 from .fx import Flash, Particles, Starfield, make_crt
 from .run import Run
@@ -19,17 +20,19 @@ TITLE, MAP, COMBAT, TRADER, EVENT, REST, INTERLUDE, GAMEOVER = range(8)
 
 
 class Game:
-    def __init__(self, scale=3, fullscreen=False, crt=True):
+    def __init__(self, scale=3, fullscreen=False, crt=True, sound=True):
         pygame.init()
+        self.audio = Audio(sound)
         pygame.display.set_caption("NOVA")
         self.scale = scale
+        self.auto_scale = scale is None
         self.fullscreen = fullscreen
         self.crt_on = crt
         self.screen = None
         self.crt = None
+        self.canvas = None
+        self.offset = (0, 0)
         self._open_window()
-
-        self.canvas = pygame.Surface((data.W, data.H))
         self.art = Art()
         self.art.load_fonts()
         self.clock = pygame.time.Clock()
@@ -49,18 +52,54 @@ class Game:
         self.difficulty = 1
         self.players = 1
         self.enter_title()
+        self.audio.music(0, 0)
 
     # -- window -----------------------------------------------------------
     def _open_window(self):
+        """Size the canvas to whatever display we were handed.
+
+        The zoom is always a whole number, so a game pixel stays a hard square;
+        the canvas then takes however many game pixels fit. That is what makes
+        one build look right on 1080p, on a 3440x1440 ultrawide and on a
+        1366x768 laptop without letterboxing any of them.
+        """
         if self.fullscreen:
-            self.screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN |
-                                                  pygame.SCALED)
-            size = self.screen.get_size()
-            self.scale = max(1, min(size[0] // data.W, size[1] // data.H))
+            info = pygame.display.Info()
+            self.screen = pygame.display.set_mode((info.current_w,
+                                                   info.current_h),
+                                                  pygame.FULLSCREEN)
         else:
-            self.screen = pygame.display.set_mode((data.W * self.scale,
-                                                   data.H * self.scale))
-        self.crt = make_crt(self.screen.get_size())
+            if self.auto_scale:
+                info = pygame.display.Info()
+                want = (int(info.current_w * 0.7), int(info.current_h * 0.7))
+            else:
+                want = (data.ARENA_W * self.scale,
+                        (data.ARENA_H + data.HUD_H) * self.scale)
+            self.screen = pygame.display.set_mode(want, pygame.RESIZABLE)
+
+        self._fit(self.screen.get_size())
+
+    def _fit(self, size):
+        sw, sh = size
+        if self.fullscreen or self.auto_scale:
+            self.scale = data.pick_scale(sw, sh)
+        else:
+            self.scale = max(1, min(self.scale,
+                                    data.pick_scale(sw, sh)))
+        cw = max(data.MIN_CANVAS_W, sw // self.scale)
+        ch = max(data.MIN_CANVAS_H, sh // self.scale)
+        data.set_viewport(cw, ch)
+        self.canvas = pygame.Surface((cw, ch))
+        # Centre the blown-up canvas: integer division can leave a few pixels
+        # over, and splitting them looks intentional where a corner does not.
+        self.offset = ((sw - cw * self.scale) // 2, (sh - ch * self.scale) // 2)
+        self.crt = make_crt((cw * self.scale, ch * self.scale))
+        if hasattr(self, "stars"):
+            self.stars.rebuild()
+
+    def resize(self, size):
+        self.screen = pygame.display.set_mode(size, pygame.RESIZABLE)
+        self._fit(size)
 
     def toggle_fullscreen(self):
         self.fullscreen = not self.fullscreen
@@ -69,7 +108,8 @@ class Game:
     def set_scale(self, scale):
         if self.fullscreen:
             return
-        self.scale = max(1, min(6, scale))
+        self.auto_scale = False
+        self.scale = max(1, min(8, scale))
         self._open_window()
 
     # -- state entry ------------------------------------------------------
@@ -87,6 +127,7 @@ class Game:
     def start_run(self, players):
         self.players = players
         self.run = Run(players, self.difficulty)
+        self.audio.music(0, self.run.seed)
         self.new_sector()
 
     def new_sector(self):
@@ -115,13 +156,28 @@ class Game:
             self.enter_event()
         else:
             self.state = COMBAT
-            self.combat = Combat(self.run, kind, self.art)
+            self.combat = Combat(self.run, kind, self.art, self.audio)
             self.pending = kind
+            self.audio.music(self.run.sector, self.run.seed)
 
     def enter_trader(self, free):
-        self.state = TRADER
         self.free_pick = free
         self.offers = self.run.offers(3)
+        if not self.offers:
+            # Deep in the Void every upgrade can be maxed out. An empty shop
+            # used to build an empty menu, which indexed past the end of its own
+            # hint list the moment it drew.
+            if free:
+                self.run.crystals += 40
+                self.state = REST
+                self.message = ("NOTHING LEFT TO FIT", data.CYAN,
+                                "The ship is fully upgraded: +40 crystals")
+            else:
+                self.state = REST
+                self.message = ("TRADER", data.YELLOW,
+                                "Nothing here you do not already have")
+            return
+        self.state = TRADER
         self.build_trader_menu()
 
     def build_trader_menu(self):
@@ -188,8 +244,9 @@ class Game:
                 self.message = ("NOTHING HAPPENS", data.GREY, "Not enough crystals")
         elif effect == "ambush":
             self.state = COMBAT
-            self.combat = Combat(run, data.N_ELITE, self.art)
+            self.combat = Combat(run, data.N_ELITE, self.art, self.audio)
             self.pending = data.N_ELITE
+            self.audio.music(run.sector, run.seed)
             return
         else:
             self.message = ("YOU MOVE ON", data.GREY, "Nothing out here")
@@ -197,6 +254,8 @@ class Game:
 
     def after_combat(self, won):
         if not won:
+            self.audio.stop_music()
+            self.audio.play("game_over")
             self.state = GAMEOVER
             return
         if self.pending in (data.N_ELITE, data.N_BOSS):
@@ -211,6 +270,7 @@ class Game:
             self.run.sector += 1
             if self.run.sector == 5:
                 self.run.cleared = True
+            self.audio.play("sector_clear")
             self.state = INTERLUDE
             self.message = None
         else:
@@ -245,6 +305,9 @@ class Game:
         if e.type == pygame.QUIT:
             self.running = False
             return
+        if e.type == pygame.VIDEORESIZE and not self.fullscreen:
+            self.resize((max(320, e.w), max(200, e.h)))
+            return
         if e.type != pygame.KEYDOWN:
             return
         if e.key == pygame.K_F11 or (e.key == pygame.K_RETURN and
@@ -254,6 +317,11 @@ class Game:
         if e.key == pygame.K_F1:
             self.crt_on = not self.crt_on
             return
+        if e.key == pygame.K_m:
+            self.audio.toggle_mute()
+            if not self.audio.muted and self.run is not None:
+                self.audio.music(self.run.sector, self.run.seed)
+            return
         if e.key in (pygame.K_KP_PLUS, pygame.K_EQUALS):
             self.set_scale(self.scale + 1)
             return
@@ -261,8 +329,10 @@ class Game:
             self.set_scale(self.scale - 1)
             return
 
+        before = self.menu.index if self.menu else 0
         if self.state == TITLE:
             choice = self.menu.key(e)
+            self._menu_feedback(before, choice)
             if choice == 0:
                 self.start_run(1)
             elif choice == 1:
@@ -278,15 +348,19 @@ class Game:
                 return
             if e.key in (pygame.K_UP, pygame.K_w):
                 self.sel_index = (self.sel_index - 1) % len(opts)
+                self.audio.play("menu_move")
             elif e.key in (pygame.K_DOWN, pygame.K_s):
                 self.sel_index = (self.sel_index + 1) % len(opts)
+                self.audio.play("menu_move")
             elif e.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_KP_ENTER):
+                self.audio.play("jump")
                 node = opts[self.sel_index]
                 kind = self.map.advance(node)
                 self.enter_node(kind)
             self.selected = opts[min(self.sel_index, len(opts) - 1)]
         elif self.state == TRADER:
             choice = self.menu.key(e)
+            self._menu_feedback(before, choice)
             if choice is None:
                 return
             if self.free_pick:
@@ -299,9 +373,11 @@ class Game:
                 if self.run.can_buy(i):
                     self.run.crystals -= self.run.price(i)
                     self.run.grant(data.SHOP[i][1])
+                    self.audio.play("buy")
                     self.build_trader_menu()
         elif self.state == EVENT:
             choice = self.menu.key(e)
+            self._menu_feedback(before, choice)
             if choice is not None:
                 self.resolve_event(choice)
         elif self.state == REST:
@@ -313,6 +389,17 @@ class Game:
         elif self.state == GAMEOVER:
             if e.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_KP_ENTER):
                 self.enter_title()
+
+    def _menu_feedback(self, before, choice):
+        if self.menu is None:
+            return
+        if choice is None:
+            if self.menu.index != before:
+                self.audio.play("menu_move")
+        elif self.menu.enabled[choice]:
+            self.audio.play("menu_ok")
+        else:
+            self.audio.play("menu_no")
 
     # -- update / draw ----------------------------------------------------
     def update(self, dt):
@@ -351,11 +438,13 @@ class Game:
             elif self.state == GAMEOVER:
                 self.draw_gameover(c)
 
-        frame = pygame.transform.scale(c, self.screen.get_size())
+        w, h = c.get_size()
+        frame = pygame.transform.scale(c, (w * self.scale, h * self.scale))
         self.screen.fill((0, 0, 0))
-        self.screen.blit(frame, (ox * self.scale, oy * self.scale))
+        self.screen.blit(frame, (self.offset[0] + ox * self.scale,
+                                 self.offset[1] + oy * self.scale))
         if self.crt_on:
-            self.screen.blit(self.crt, (0, 0))
+            self.screen.blit(self.crt, self.offset)
         pygame.display.flip()
 
     def draw_title(self, c):
@@ -369,8 +458,9 @@ class Game:
                 data.GREY, centre=True)
         # 138 keeps the menu's own hint line clear of the shortcut line below
         self.menu.draw(c, self.art, 138, self.t)
-        ui.text(c, self.art, "F11 fullscreen    F1 CRT filter    +/- window size",
-                data.W // 2, 256, data.DARK, centre=True)
+        ui.text(c, self.art,
+                "F11 fullscreen   F1 CRT   M mute   +/- size",
+                data.W // 2, data.H - 14, data.DARK, centre=True)
 
     def draw_trader(self, c):
         if self.free_pick:

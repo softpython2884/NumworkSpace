@@ -32,7 +32,8 @@ class Bullet:
 
     @property
     def alive(self):
-        return -20 < self.y < data.BOT + 20 and -20 < self.x < data.W + 20
+        return (data.TOP - 24 < self.y < data.BOT + 20
+                and data.PLAY_L - 20 < self.x < data.PLAY_R + 20)
 
 
 class EnemyBullet:
@@ -51,7 +52,8 @@ class EnemyBullet:
 
     @property
     def alive(self):
-        return (-20 < self.y < data.BOT + 20) and (-20 < self.x < data.W + 20)
+        return (data.TOP - 40 < self.y < data.BOT + 20
+                and data.PLAY_L - 20 < self.x < data.PLAY_R + 20)
 
 
 class Pickup:
@@ -94,7 +96,7 @@ class Pickup:
 
 class Player:
     __slots__ = ("x", "y", "index", "cooldown", "invuln", "shield", "shield_t",
-                 "w", "h", "alive", "thrust")
+                 "w", "h", "alive", "thrust", "was_shielded")
 
     SPEED = 165.0
 
@@ -110,6 +112,7 @@ class Player:
         self.h = 17
         self.alive = True
         self.thrust = 0.0
+        self.was_shielded = False
 
     def rect(self):
         # A forgiving hitbox: narrower and shorter than the sprite, as any
@@ -124,10 +127,13 @@ class Player:
             dy *= k
         self.x += dx * speed * dt
         self.y += dy * speed * dt
-        self.x = max(8, min(data.W - 8, self.x))
-        # Ships stay in the lower part of the screen: classic vertical shmup
+        # Bounded by the arena, not the canvas: on an ultrawide the extra
+        # canvas is scenery, and flying out into it would change the game.
+        self.x = max(data.PLAY_L + 8, min(data.PLAY_R - 8, self.x))
+        # Ships stay in the lower part of the arena: classic vertical shmup
         # framing, and it keeps the enemy approach readable.
-        self.y = max(data.TOP + 96, min(data.BOT - 12, self.y))
+        arena_h = data.BOT - data.TOP
+        self.y = max(data.TOP + arena_h * 0.4, min(data.BOT - 12, self.y))
         self.thrust = 1.0 if dy < 0 else (0.35 if dy > 0 else 0.7)
         if self.invuln > 0:
             self.invuln -= dt
@@ -187,7 +193,7 @@ class Enemy:
         self.max_hp = hp
         self.t = random.uniform(0, 6.0)
         self.fire_t = random.uniform(0.4, 1.8)
-        self.anchor = data.TOP + 40 + random.uniform(0, 70)
+        self.anchor = data.TOP + 40 + random.uniform(0, (data.BOT - data.TOP) * 0.28)
         self.drift = random.choice((-1, 1)) * random.uniform(30, 62)
         self.flash = 0.0
         self.phase = 0
@@ -218,7 +224,7 @@ class Enemy:
                 self.x += math.sin(self.t * 1.1) * 26 * dt
         elif k == data.BOSS_ID:
             self.x += self.drift * dt
-            if self.x < 60 or self.x > data.W - 60:
+            if self.x < data.PLAY_L + 60 or self.x > data.PLAY_R - 60:
                 self.drift = -self.drift
             # It holds the top of the screen and never descends. Dropping it
             # onto the player looked like good pressure and was the opposite:
@@ -229,7 +235,7 @@ class Enemy:
                 1 if self.hp > self.max_hp * 0.25 else 2)
         else:
             self.y += speed * dt
-        self.x = max(6, min(data.W - 6, self.x))
+        self.x = max(data.PLAY_L + 6, min(data.PLAY_R - 6, self.x))
 
     def wants_to_fire(self, dt):
         rate = data.ENEMY_FIRE[self.kind]

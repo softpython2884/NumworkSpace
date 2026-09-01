@@ -6,13 +6,55 @@ art and the tables are readable. What carries over is the look: a small fixed
 palette, chunky pixels, nothing anti-aliased.
 """
 
-# Internal resolution. Everything is drawn here and scaled up whole-number to
-# the window, so a pixel stays a pixel.
+# --- viewport ------------------------------------------------------------
+# The canvas is sized to the display, then blown up by a WHOLE number, so a
+# game pixel is always a hard square. Its dimensions therefore change with the
+# monitor: 480x270 on 1080p, 688x288 on a 3440x1440 ultrawide, 455x256 on a
+# 1366x768 laptop.
+#
+# The playfield does NOT change with it. On a vertical shmup the width of the
+# arena is a difficulty setting -- give an ultrawide player 40% more room to
+# dodge in and it is a different, easier game. So the arena keeps a fixed size,
+# centred, and the extra canvas becomes starfield and side panels.
+#
+# W/H are the canvas; TOP/BOT/PLAY_L/PLAY_R bound the arena. Modules read them
+# through `data.`, never by copying, so a resize takes effect everywhere at
+# once.
+
+ARENA_W = 480          # arena size in game units, on any monitor
+ARENA_H = 244
+MIN_CANVAS_W = 440     # below this the arena shrinks to fit
+MIN_CANVAS_H = 250
+HUD_H = 26
+
 W = 480
 H = 270
-HUD_H = 26
 TOP = HUD_H
-BOT = H
+BOT = 270
+PLAY_L = 0
+PLAY_R = 480
+
+
+def pick_scale(screen_w, screen_h):
+    """Largest whole-number zoom that still shows a usable canvas."""
+    return max(1, min(screen_w // MIN_CANVAS_W, screen_h // MIN_CANVAS_H))
+
+
+def set_viewport(canvas_w, canvas_h):
+    """Resize the canvas and re-centre the arena inside it."""
+    global W, H, TOP, BOT, PLAY_L, PLAY_R
+    W = canvas_w
+    H = canvas_h
+    play_w = min(ARENA_W, canvas_w)
+    play_h = min(ARENA_H, canvas_h - HUD_H)
+    PLAY_L = (canvas_w - play_w) // 2
+    PLAY_R = PLAY_L + play_w
+    TOP = HUD_H + (canvas_h - HUD_H - play_h) // 2
+    BOT = TOP + play_h
+
+
+def arena_rect():
+    return (PLAY_L, TOP, PLAY_R - PLAY_L, BOT - TOP)
 
 # --- palette -------------------------------------------------------------
 BLACK = (10, 12, 18)
@@ -35,6 +77,10 @@ BLUE = (96, 152, 255)
 
 # One accent per sector, reused for enemy tinting and UI chrome.
 SECTOR_COLOURS = (CYAN, GREEN, VIOLET, ORANGE, RED)
+
+
+def SEC_ACCENT(sector):
+    return SECTOR_COLOURS[sector % len(SECTOR_COLOURS)]
 
 # Star layers: colour and pixels per frame.
 STAR_LAYERS = ((62, 70, 96, 0.35), (110, 124, 156, 0.7), (206, 216, 244, 1.25))

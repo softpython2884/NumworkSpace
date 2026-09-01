@@ -27,6 +27,7 @@ class Menu:
     """
 
     def __init__(self, items, hints=None, colours=None, enabled=None):
+        assert items, "a menu with no items cannot be drawn or chosen from"
         self.items = items
         self.hints = hints or [""] * len(items)
         self.colours = colours or [data.WHITE] * len(items)

@@ -12,7 +12,8 @@ Un rogue-lite spatial, en deux éditions :
   tas de la machine, 25 images par seconde.
 - **[PC (pygame)](pc/README.md)** — le même jeu, sans la camisole mémoire :
   carte de secteur dessinée, 12 améliorations, 3 difficultés, événements,
-  particules, filtre CRT.
+  particules, son chiptune synthétisé, et un affichage qui s'adapte à
+  n'importe quelle résolution du 1366×768 à l'ultrawide 21:9.
 
 ![NOVA sur PC](docs/img/pc-03-fight.png)
 
@@ -30,7 +31,10 @@ cd pc && pip install pygame && python3 nova.py
 | La carte de secteur à embranchements | Boss en phase 2 |
 
 Déplacement 8 directions, tir automatique, coop 2 joueurs sur le même clavier.
-Tout est dans [pc/README.md](pc/README.md).
+Zoom toujours entier, arène de taille fixe quelle que soit la résolution, et
+20 effets sonores synthétisés au démarrage (aucun fichier audio) —
+[à écouter](docs/nova-sound-demo.wav). Tout est dans
+[pc/README.md](pc/README.md).
 
 ## Édition NumWorks
 

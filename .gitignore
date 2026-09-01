@@ -11,3 +11,4 @@ tools/mp/micropython
 tools/mp/micropython-src/
 tools/mp/work/
 tools/mp/stubs/_probe.py
+pc/**/__pycache__/

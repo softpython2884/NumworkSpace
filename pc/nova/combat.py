@@ -10,25 +10,40 @@ import random
 
 import pygame
 
-from . import art as art_mod
 from . import data
+from .ui import text as _text
 from . import entities as ent
 from .fx import Flash, Particles, Shake, Starfield
+
+
+class _Silent:
+    """Stand-in so callers never have to check whether sound exists."""
+
+    def play(self, *a, **k):
+        pass
+
+    def music(self, *a, **k):
+        pass
+
+    def stop_music(self):
+        pass
 
 
 class Combat:
     """One combat node. `result` becomes True (cleared) or False (ship lost)."""
 
-    def __init__(self, run, kind, art):
+    def __init__(self, run, kind, art, audio=None):
         self.run = run
         self.kind = kind
         self.art = art
+        self.audio = audio or _Silent()
         self.result = None
         self.rng = run.rng
 
-        self.players = [ent.Player(0, data.W * 0.5 - (34 if run.players > 1 else 0))]
+        mid = (data.PLAY_L + data.PLAY_R) * 0.5
+        self.players = [ent.Player(0, mid - (34 if run.players > 1 else 0))]
         if run.players > 1:
-            self.players.append(ent.Player(1, data.W * 0.5 + 34))
+            self.players.append(ent.Player(1, mid + 34))
 
         self.bullets = []
         self.enemies = []
@@ -59,9 +74,11 @@ class Combat:
         if self.is_boss:
             self.budget = 0
             hp = self.boss_hp()
-            self.boss = ent.Enemy(data.BOSS_ID, data.W / 2, data.TOP - 20, hp, sector)
+            self.boss = ent.Enemy(data.BOSS_ID, (data.PLAY_L + data.PLAY_R) / 2,
+                                  data.TOP - 20, hp, sector)
             self.enemies.append(self.boss)
             self.tag = "WARLORD"
+            self.audio.play("boss_warn")
         else:
             self.tag = "S%d-%d" % (sector + 1, run.node + 1)
 
@@ -81,7 +98,7 @@ class Combat:
     def nearest_player_pos(self, x):
         live = self.live_players()
         if not live:
-            return data.W / 2, data.BOT
+            return (data.PLAY_L + data.PLAY_R) / 2, data.BOT
         best = min(live, key=lambda p: abs(p.x - x))
         return best.x, best.y
 
@@ -94,7 +111,7 @@ class Combat:
         kind = self.rng.randrange(self.pool)
         self.budget -= data.ENEMY_COST[kind]
         hp = data.ENEMY_HP[kind] + self.run.sector
-        x = self.rng.uniform(24, data.W - 24)
+        x = self.rng.uniform(data.PLAY_L + 24, data.PLAY_R - 24)
         e = ent.Enemy(kind, x, data.TOP - 14, hp, self.run.sector)
         self.enemies.append(e)
         gap = max(0.28, 0.85 - self.run.sector * 0.06) * self.rng.uniform(0.6, 1.4)
@@ -104,6 +121,10 @@ class Combat:
         """Score, salvage and a proper explosion."""
         self.run.score += e.score
         big = e.kind == data.BOSS_ID
+        # throttled: a bomb kills a dozen ships in one frame, and a dozen
+        # explosion samples on top of each other is just noise
+        self.audio.play("explode_big" if big else "explode",
+                        1.0 if big else 0.8, throttle=0.0 if big else 0.045)
         colours = (data.WHITE, data.YELLOW, data.ORANGE, data.RED)
         self.particles.burst(e.x, e.y, 46 if big else 16, 260 if big else 140,
                              colours, 0.85 if big else 0.5, 2 if big else 1)
@@ -127,12 +148,14 @@ class Combat:
             return
         if p.take_hit():
             self.run.hull -= 1
+            self.audio.play("hurt")
             self.flash.pop(data.RED, 0.5)
             self.shake.kick(7.0)
             self.particles.burst(p.x, p.y, 24, 170,
                                  (data.RED, data.ORANGE, data.WHITE), 0.55, 2)
             self.hitstop = 0.09
         else:
+            self.audio.play("shield_break")
             self.flash.pop(data.BLUE, 0.35)
             self.shake.kick(3.5)
             self.particles.burst(p.x, p.y, 20, 150, (data.BLUE, data.WHITE), 0.4, 1)
@@ -141,11 +164,12 @@ class Combat:
         if self.run.bombs <= 0:
             return
         self.run.bombs -= 1
+        self.audio.play("bomb")
         self.flash.pop(data.WHITE, 1.0, decay=3.2)
         self.shake.kick(12.0)
         self.shots.clear()
         for _ in range(90):
-            self.particles.burst(self.rng.uniform(0, data.W),
+            self.particles.burst(self.rng.uniform(data.PLAY_L, data.PLAY_R),
                                  self.rng.uniform(data.TOP, data.BOT),
                                  2, 130, (data.WHITE, data.CYAN), 0.5, 2)
         for e in list(self.enemies):
@@ -186,7 +210,13 @@ class Combat:
                                     data.ORANGE if self.rng.random() < 0.6
                                     else data.YELLOW, 1, drag=3.0)
             if p.can_fire():
-                self.bullets.extend(p.fire(up))
+                shots = p.fire(up)
+                self.bullets.extend(shots)
+                self.audio.play("shoot_big" if len(shots) > 2 else "shoot",
+                                0.8, throttle=0.035)
+            if p.shield and not p.was_shielded:
+                self.audio.play("shield_up", 0.7)
+            p.was_shielded = p.shield
 
         for b in self.bullets:
             b.update(dt)
@@ -198,6 +228,7 @@ class Combat:
             if e.y > data.TOP - 4 and e.wants_to_fire(dt):
                 self.shots.extend(e.volley(tx, ty, self.run.difficulty
                                            + self.run.fire_bonus))
+                self.audio.play("enemy_shoot", 0.55, throttle=0.06)
 
         targets = self.live_players()
         for pk in self.pickups:
@@ -239,6 +270,7 @@ class Combat:
                 if ent.overlaps((b.x - 1, b.y - 3, b.w, b.h), e.rect()):
                     e.hp -= b.dmg
                     e.flash = 0.08
+                    self.audio.play("hit", 0.5, throttle=0.03)
                     self.particles.burst(b.x, b.y, 4, 90,
                                          (data.WHITE, data.YELLOW), 0.2, 1,
                                          spread=2.2, angle=-math.pi / 2)
@@ -270,10 +302,12 @@ class Combat:
                                 (pk.x - 3, pk.y - 3, 6, 6)):
                     if pk.kind:
                         run.heal(1)
+                        self.audio.play("repair", 0.8)
                         self.particles.burst(pk.x, pk.y, 8, 70, (data.GREEN,), 0.35)
                     else:
                         run.crystals += run.crystal_value()
                         run.score += 5
+                        self.audio.play("crystal", 0.5, throttle=0.04)
                         self.particles.burst(pk.x, pk.y, 6, 70, (data.CYAN,), 0.3)
                     pk.life = -1
         self.enemies = [e for e in self.enemies if e.hp > 0]
@@ -284,6 +318,7 @@ class Combat:
         self.stars.draw(surf)
         a = self.art
         sector = self.run.sector
+        self.draw_frame(surf)
 
         for pk in self.pickups:
             img = a.repair if pk.kind else a.crystal
@@ -320,4 +355,87 @@ class Combat:
             if p.shield:
                 pygame.draw.circle(surf, data.BLUE, (int(p.x), int(p.y)), 13, 1)
 
+        self.mask_margins(surf)
+        self.draw_side_panel(surf)
         self.flash.draw(surf)
+
+    def draw_frame(self, surf):
+        """Rails either side of the arena, so the playable width reads as
+        deliberate rather than as a window that failed to stretch."""
+        if data.PLAY_L <= 0:
+            return
+        for x in (data.PLAY_L - 2, data.PLAY_R + 1):
+            pygame.draw.line(surf, data.DARK, (x, data.TOP), (x, data.BOT))
+            pygame.draw.line(surf, data.GREY, (x, data.TOP), (x, data.TOP + 8))
+            pygame.draw.line(surf, data.GREY, (x, data.BOT - 8), (x, data.BOT))
+
+    def draw_side_panel(self, surf):
+        """On a wide monitor the margins get the ship's loadout.
+
+        It is information the HUD has no room for at 16:9, and it stops the
+        scenery from looking like wasted screen.
+        """
+        margin = data.PLAY_L
+        if margin < 76:
+            return
+        a = self.art
+        up = self.run.upgrades
+        x = 8
+        y = data.TOP + 6
+        _text(surf, a, "LOADOUT", x, y, data.DARK)
+        y += 16
+        shown = 0
+        # Names vary in length and the margin varies with the monitor, so the
+        # label is trimmed to whatever is actually left once the level pips
+        # have their space. A fixed column ran straight through the long ones.
+        char_w = max(1, a.font.size("M")[0])
+        pip_x = margin - 20
+        for name, index, _price, _blurb in data.SHOP:
+            level = up[index]
+            if not level:
+                continue
+            room = max(3, (pip_x - x - 4) // char_w)
+            _text(surf, a, name[:room], x, y, data.GREY)
+            for i in range(level):
+                surf.fill(data.CYAN, (pip_x + i * 5, y + 4, 3, 5))
+            y += 13
+            shown += 1
+        if not shown:
+            _text(surf, a, "stock ship", x, y, data.DARK)
+
+        rx = data.PLAY_R + 10
+        ry = data.TOP + 6
+        _text(surf, a, "SECTOR", rx, ry, data.DARK)
+        label = ("VOID %d" % (self.run.sector - 4)) if self.run.sector > 4 \
+            else str(self.run.sector + 1)
+        _text(surf, a, label, rx, ry + 16, data.SEC_ACCENT(self.run.sector))
+        _text(surf, a, "NODE %d" % (self.run.node + 1), rx, ry + 32, data.GREY)
+        if self.is_boss and self.boss is not None:
+            _text(surf, a, "WARLORD", rx, ry + 54, data.RED)
+
+    def mask_margins(self, surf):
+        """Clip anything that leaked outside the arena.
+
+        Explosions and engine trails are free to spray past the rails; without
+        this they would scatter across the scenery and give away that the
+        margins are just more canvas.
+        """
+        if data.PLAY_L > 0:
+            left = pygame.Surface((data.PLAY_L - 1, data.BOT - data.TOP),
+                                  pygame.SRCALPHA)
+            left.fill((*data.VOID, 232))
+            surf.blit(left, (0, data.TOP))
+            right_w = data.W - data.PLAY_R - 2
+            if right_w > 0:
+                right = pygame.Surface((right_w, data.BOT - data.TOP),
+                                       pygame.SRCALPHA)
+                right.fill((*data.VOID, 232))
+                surf.blit(right, (data.PLAY_R + 2, data.TOP))
+        if data.TOP > data.HUD_H:
+            top = pygame.Surface((data.W, data.TOP - data.HUD_H), pygame.SRCALPHA)
+            top.fill((*data.VOID, 232))
+            surf.blit(top, (0, data.HUD_H))
+        if data.BOT < data.H:
+            bot = pygame.Surface((data.W, data.H - data.BOT), pygame.SRCALPHA)
+            bot.fill((*data.VOID, 232))
+            surf.blit(bot, (0, data.BOT))

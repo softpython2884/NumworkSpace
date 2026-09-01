@@ -14,11 +14,66 @@ python3 nova.py
 
 | Option | |
 |---|---|
-| `--scale N` | Taille de fenêtre, 1 à 6 (défaut 3 → 1440×810) |
+| `--scale N` | Force un zoom entier (par défaut : choisi selon l'écran) |
 | `--fullscreen` | Démarre en plein écran |
 | `--no-crt` | Coupe les scanlines |
+| `--no-sound` | Démarre en muet |
 
-En jeu : `F11` plein écran · `F1` filtre CRT · `+`/`-` taille de fenêtre.
+En jeu : `F11` plein écran · `F1` filtre CRT · `M` muet · `+`/`-` taille · la
+fenêtre est redimensionnable à la souris.
+
+## Résolutions
+
+Le jeu s'adapte à n'importe quelle résolution, **sans bandes noires**. Le zoom
+est toujours un **entier** — un pixel de jeu reste un carré net — et le canvas
+prend ensuite autant de pixels de jeu qu'il en faut pour remplir l'écran.
+
+| Écran | Zoom | Canvas | Arène |
+|---|---|---|---|
+| 1920×1080 | ×4 | 480×270 | 480×244 |
+| 2560×1440 | ×5 | 512×288 | 480×244 |
+| **3440×1440** (21:9) | ×5 | 688×288 | 480×244 |
+| 1920×1200 (16:10) | ×4 | 480×300 | 480×244 |
+| 1366×768 | ×3 | 455×256 | 455×230 |
+| 3840×2160 | ×8 | 480×270 | 480×244 |
+
+**L'arène, elle, ne change pas.** Sur un shmup vertical, la largeur du terrain
+*est* un réglage de difficulté : donner 40 % de place en plus à quelqu'un en
+ultrawide, c'est lui donner un autre jeu, plus facile. L'arène garde donc une
+taille fixe, centrée, et le canvas supplémentaire devient du décor — champ
+d'étoiles, rails, et un panneau latéral qui affiche l'équipement du vaisseau.
+
+![Ultrawide](../docs/img/pc-res-ultrawide.png)
+
+*3440×1440. L'arène est cadrée par ses rails, les marges portent le loadout à
+gauche et le secteur à droite.*
+
+Sur un écran étroit (1366×768), l'arène se réduit pour tenir, et il n'y a
+simplement pas de marges.
+
+## Son
+
+Tout est **synthétisé au démarrage** — ondes carrées, triangles et bruit avec
+enveloppes, comme une NES. Aucun fichier audio dans le dépôt : 20 effets et
+cinq boucles de musique, construits en **0,04 seconde**.
+
+À écouter : [`docs/nova-sound-demo.wav`](../docs/nova-sound-demo.wav) — les
+20 effets puis un extrait de musique.
+
+| | |
+|---|---|
+| Armes | tir simple, tir large (3+ canons), tir ennemi |
+| Impacts | touche, explosion, explosion de boss |
+| Vaisseau | dégât, déflecteur qui encaisse, déflecteur rechargé, bombe |
+| Butin | cristal, réparation |
+| Interface | navigation, validation, refus, achat, saut |
+| Jingles | alerte boss, secteur terminé, fin de partie |
+
+La musique change à chaque secteur : basse triangle et arpège carré, gamme et
+tempo propres à chacun, structure tirée de la graine de la partie.
+
+`M` coupe le son. Sans numpy, ou sur une machine sans carte son, le jeu
+démarre en silence plutôt que de planter.
 
 ## Contrôles
 
@@ -71,6 +126,7 @@ pc/
     entities.py      vaisseaux, tirs, butin — tout en pixels par seconde
     combat.py        la scène de combat
     fx.py            particules, shake, flash, étoiles, overlay CRT
+    audio.py         synthèse chiptune : ondes, enveloppes, catalogue, musique
     sector.py        génération et rendu de la carte
     run.py           l'état d'une partie
     ui.py            menus, panneaux, HUD
@@ -92,6 +148,14 @@ python3 tools/shots.py       # régénère les captures
 événements clavier, mêmes combats, rien n'est simulé sauf l'écran. Il valide
 aussi qu'aucun écran ne peut mener à une impasse.
 
+`test_audio.py` attrape un piège discret : un nom d'effet mal orthographié est
+**silencieux, pas une erreur** — `play("expode")` ne fait rien, pour toujours,
+et personne ne le remarque. Le test enregistre chaque son demandé pendant une
+partie et exige que les deux ensembles coïncident dans les deux sens ; un effet
+construit mais jamais déclenché est aussi une anomalie. Les sons rares
+(réparation, déflecteur, refus d'achat, fin de partie) sont provoqués
+explicitement, sinon le résultat dépendrait de la graine.
+
 Mesures actuelles :
 
 | | |
@@ -99,6 +163,7 @@ Mesures actuelles :
 | Taux de victoire (bot) | Cadet 7/8 · **Pilote 4/8** · As 1/8 |
 | Durée d'une partie gagnée | 9 à 11 min de combat |
 | Coût d'une image (p99) | **1,35 ms** sur un budget de 16,7 ms |
+| Construction des sons | 20 effets en **0,04 s** au démarrage |
 
 Le pilote automatique a une information parfaite et des réflexes parfaits mais
 une stratégie naïve : un humain fera moins bien, ce qui est le bon sens de

@@ -150,22 +150,31 @@ class Flash:
 
 
 class Starfield:
-    """Three parallax layers, back on PC. Stars are stored as floats so the slow
-    layers drift smoothly instead of stepping a pixel at a time."""
+    """Three parallax layers. Stars are floats so the slow layers drift smoothly
+    instead of stepping a pixel at a time.
+
+    The field covers the whole canvas, not just the arena: on a wide monitor the
+    margins either side of the playfield are scenery, and empty black there would
+    look like a bug rather than a frame.
+    """
 
     def __init__(self, count=110):
         self.stars = []
-        for _ in range(count):
-            layer = random.randrange(3)
-            self.stars.append([random.uniform(0, data.W),
-                               random.uniform(data.TOP, data.BOT), layer])
+        self.density = count / (480.0 * 270.0)
+        self.rebuild()
+
+    def rebuild(self):
+        want = max(60, int(self.density * data.W * data.H))
+        self.stars = [[random.uniform(0, data.W), random.uniform(0, data.H),
+                       random.randrange(3)] for _ in range(want)]
 
     def update(self, dt, speed=1.0):
+        h = data.H
         for s in self.stars:
             r, g, b, v = data.STAR_LAYERS[s[2]]
             s[1] += v * 46.0 * speed * dt
-            if s[1] >= data.BOT:
-                s[1] -= data.BOT - data.TOP
+            if s[1] >= h:
+                s[1] -= h
                 s[0] = random.uniform(0, data.W)
 
     def draw(self, surf):

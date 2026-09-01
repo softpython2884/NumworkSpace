@@ -81,12 +81,15 @@ class SectorMap:
 
 
 # --- drawing -------------------------------------------------------------
-X0, DX = 42, 54
-Y0, DY = 92, 52
+DX, DY = 54, 52
 
 
 def node_pos(col, row):
-    return X0 + col * DX, Y0 + row * DY
+    """Centred on whatever canvas we were given, so the map sits in the middle
+    of an ultrawide instead of hugging the left edge."""
+    x0 = (data.W - (COLS - 1) * DX) // 2
+    y0 = (data.H - (ROWS - 1) * DY) // 2 + 8
+    return x0 + col * DX, y0 + row * DY
 
 
 def draw_map(surf, art, smap, run, selected, t):
@@ -137,14 +140,15 @@ def draw_map(surf, art, smap, run, selected, t):
         if is_here:
             pygame.draw.rect(surf, accent, (x - 3, y + 12, 6, 3))
 
+    foot = data.H - 46
     if selected in smap.nodes:
         kind = smap.nodes[selected]
-        art_mod_text(surf, art, data.NODE_NAME[kind], data.W // 2, 224,
-                     data.NODE_COLOUR[kind], centre=True, big=False)
-        art_mod_text(surf, art, data.NODE_HINT[kind], data.W // 2, 240,
+        art_mod_text(surf, art, data.NODE_NAME[kind], data.W // 2, foot,
+                     data.NODE_COLOUR[kind], centre=True)
+        art_mod_text(surf, art, data.NODE_HINT[kind], data.W // 2, foot + 16,
                      data.GREY, centre=True)
-    art_mod_text(surf, art, "UP/DOWN  choose      ENTER  jump", data.W // 2, 256,
-                 data.DARK, centre=True)
+    art_mod_text(surf, art, "UP/DOWN  choose      ENTER  jump", data.W // 2,
+                 data.H - 14, data.DARK, centre=True)
 
 
 def art_mod_text(surf, art, msg, x, y, colour, centre=False, right=False,

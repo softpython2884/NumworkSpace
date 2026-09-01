@@ -62,6 +62,13 @@ class Driver:
         if g.free_pick:
             press(g, pygame.K_RETURN)
             return
+        # Try something unaffordable first when there is one: the refusal path
+        # has its own feedback, and nothing else in a scripted run exercises it.
+        blocked = [i for i, ok in enumerate(g.menu.enabled[:-1]) if not ok]
+        if blocked:
+            for _ in range((blocked[0] - g.menu.index) % len(g.menu.items)):
+                press(g, pygame.K_DOWN)
+            press(g, pygame.K_RETURN)
         for _ in range(6):
             buyable = [i for i, ok in enumerate(g.menu.enabled[:-1]) if ok]
             if not buyable:
@@ -147,6 +154,30 @@ def run_once(seed, players=1, difficulty=1):
             "fights": d.fights, "minutes": d.frames * DT / 60.0, "log": d.log}
 
 
+def test_maxed_trader():
+    """A fully upgraded ship must not break the shop.
+
+    Deep in the Void every upgrade can be at level 3, leaving nothing to offer.
+    """
+    import random as _r
+    from nova import data
+    from nova.game import GAMEOVER, REST, TRADER
+    g = Game(scale=1, crt=False, sound=False)
+    g.start_run(1)
+    g.run.rng = _r.Random(1)
+    for i in range(data.UPGRADE_COUNT):
+        g.run.upgrades[i] = 3
+    g.run.crystals = 500
+    for free in (False, True):
+        g.enter_trader(free=free)
+        assert g.state in (TRADER, REST), "unexpected state %d" % g.state
+        if g.state == TRADER:
+            assert g.menu.items, "empty trader menu"
+        else:
+            g.draw_message(g.canvas)          # must not raise
+    return True
+
+
 def main():
     seeds = (1, 7, 42, 101, 777, 2024, 31415, 60007)
     print("=== solo runs, %s ===" % data.DIFFICULTIES[1][0])
@@ -173,6 +204,11 @@ def main():
         print("  seed %-6d %-4s score %d  %.1f min" %
               (s, "WON" if r["won"] else "S%d" % (r["sector"] + 1),
                r["score"], r["minutes"]))
+
+    print()
+    print("=== edge cases ===")
+    test_maxed_trader()
+    print("  fully-upgraded ship: trader and salvage both handled")
 
     print()
     print("solo win rate    : %d/%d" % (wins, len(seeds)))
