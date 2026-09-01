@@ -154,6 +154,47 @@ def run_once(seed, players=1, difficulty=1):
             "fights": d.fights, "minutes": d.frames * DT / 60.0, "log": d.log}
 
 
+def test_boss_entrance():
+    """A boss must not be damageable while it is holding fire.
+
+    It keeps its guns quiet for the length of its name card, and the player's
+    do not stop: a ship parked underneath landed 5 to 25% of the boss's hull
+    before the fight began, depending on sector and loadout. Free damage
+    against something that cannot answer is a gap in the rules, not a reward.
+
+    Pods count. Shielding the core and leaving BULWARK's turrets exposed would
+    just move the same trick onto two of the five bosses.
+    """
+    from nova.art import Art
+    from nova.combat import Combat
+    from nova.run import Run
+    art = Art()
+    art.load_fonts()
+    loadouts = ({}, {data.U_SPREAD: 3, data.U_RATE: 3, data.U_DMG: 3,
+                     data.U_PIERCE: 1})
+    for sector in range(5):
+        for ups in loadouts:
+            run = Run(1, 1, seed=5)
+            run.sector = sector
+            for u, v in ups.items():
+                run.upgrades[u] = v
+            c = Combat(run, data.N_BOSS, art)
+            start = c.boss.max_hp
+            pods = [p.hp for p in c.boss.pods]
+            p = c.players[0]
+            while c.intro_t > 0 and c.boss is not None:
+                p.x = c.boss.x          # parked underneath, holding fire
+                c.update(DT, {"move0": (0, 0), "bomb": False})
+            assert c.boss is not None, "boss died during its own entrance"
+            assert c.boss.hp == start, (
+                "sector %d: boss lost %d hull before it acted"
+                % (sector + 1, start - c.boss.hp))
+            assert [p.hp for p in c.boss.pods] == pods, (
+                "sector %d: a pod was damaged before the boss acted" % (sector + 1))
+    print("  boss entrance: shielded until it can answer")
+    return True
+
+
 def test_maxed_trader():
     """A fully upgraded ship must not break the shop.
 
@@ -207,6 +248,7 @@ def main():
 
     print()
     print("=== edge cases ===")
+    test_boss_entrance()
     test_maxed_trader()
     print("  fully-upgraded ship: trader and salvage both handled")
 

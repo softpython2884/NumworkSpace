@@ -1,0 +1,104 @@
+name: Release
+
+# Tag a commit v1.1 (or any v*) and push the tag; this builds the binaries and
+# publishes the release. Nothing here can be run by hand against a dirty tree,
+# which is the point: what ships is exactly what the tag points at.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and publish"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  # A release that fails its own test suite is worse than no release.
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Calculator edition
+        run: |
+          python3 tools/lint_globals.py src/nova*.py
+          python3 tools/fiximports.py --check
+          python3 tools/build.py
+          git diff --exit-code -- dist/
+          python3 tests/run_all.py
+      - name: PC edition
+        run: |
+          pip install pygame-ce numpy
+          python3 pc/tests/run_all.py
+
+  build:
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            asset: NOVA-windows.exe
+            built: pc/dist/NOVA.exe
+          - os: ubuntu-latest
+            asset: NOVA-linux
+            built: pc/dist/NOVA
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: pip install pygame-ce numpy pyinstaller
+      - name: Draw the icon
+        working-directory: pc
+        run: python tools/make_icon.py
+      - name: Build
+        working-directory: pc
+        run: pyinstaller --noconfirm --clean nova.spec
+      - name: Name it for the platform
+        shell: bash
+        run: mv "${{ matrix.built }}" "${{ matrix.asset }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.asset }}
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - name: Bundle the calculator edition
+        run: |
+          mkdir -p nova-numworks
+          cp dist/*.py nova-numworks/
+          cp docs/INSTALL.md nova-numworks/
+          zip -r nova-numworks.zip nova-numworks
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          gh release create "$TAG" \
+            --title "NOVA $TAG" \
+            --notes-file .github/RELEASE_NOTES.md \
+            NOVA-windows.exe NOVA-linux nova-numworks.zip

@@ -194,6 +194,17 @@ def _clamp(v, lo, hi):
 
 
 class Boss:
+    # How long the boss is untouchable when it arrives.
+    #
+    # It holds fire while its name card is up, and the player does not: a
+    # maxed ship stands under it and lands every shot for the whole entrance,
+    # so the fight could begin with the boss already at half hull. Free damage
+    # against something that cannot answer is not a reward for skill, it is a
+    # gap in the rules. Combat widens this to cover the whole card, because a
+    # shield that expires while the boss is still holding fire only moves the
+    # gap later.
+    SPAWN_SHIELD = 2.0
+
     def __init__(self, index, sector, hp, x, y, fire_bonus=0.0, rng=None):
         self.index = index % BOSS_COUNT
         self.sector = sector
@@ -226,6 +237,7 @@ class Boss:
         self.storming = True
         self.burst_t = self.STORM[0][0]
         self.spin = self.rng.uniform(0.0, math.tau)
+        self.shield_t = self.SPAWN_SHIELD
         self.stream_t = 0.0
         if self.index in (BULWARK, WARDEN):
             pod_hp = max(8, hp // 6)
@@ -255,8 +267,19 @@ class Boss:
     def live_turrets(self):
         return [t for t in self.turrets if t.alive]
 
+    def tick_shield(self, dt):
+        """Runs during the entrance too, where `update` does not."""
+        if self.shield_t > 0:
+            self.shield_t -= dt
+
+    @property
+    def invulnerable(self):
+        return self.shield_t > 0
+
     def take_hit(self, dmg):
         """Returns the damage actually dealt."""
+        if self.invulnerable:
+            return 0
         if self.shielded:
             dmg = max(1, dmg // 4)
         self.hp -= dmg
@@ -267,6 +290,7 @@ class Boss:
     def update(self, dt, combat):
         self.t += dt
         self.state_t += dt
+        self.tick_shield(dt)
         if self.flash > 0:
             self.flash -= dt
 
@@ -646,3 +670,11 @@ class Boss:
             pygame.draw.rect(surf, data.BLUE,
                              (int(r[0]) - 2, int(r[1]) - 2,
                               int(r[2]) + 4, int(r[3]) + 4), 1)
+        if self.invulnerable:
+            # A circle, deliberately: a bracket already means "pods armouring
+            # the core" and corner ticks mean "venting". Three states that
+            # change what your shots do, three shapes.
+            rad = 23 + int(4 * abs(math.sin(self.shield_t * 5.0)))
+            colour = data.CYAN_D if int(self.shield_t * 12) % 2 else data.BLUE
+            pygame.draw.circle(surf, colour,
+                               (int(self.x), int(self.y)), rad, 1)

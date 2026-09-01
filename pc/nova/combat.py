@@ -81,6 +81,11 @@ class Combat:
                                       data.TOP - 20, run.fire_bonus, self.rng)
             self.tag = self.boss.name
             self.intro_t = 2.6
+            # Cover the whole name card, not just the boss's own two seconds:
+            # the window that needs closing is exactly the one where the boss
+            # is holding fire, and a shield that lapses first just moves the
+            # free damage a second later.
+            self.boss.shield_t = max(self.boss.SPAWN_SHIELD, self.intro_t)
             self.audio.play("boss_warn")
         else:
             self.tag = "S%d-%d" % (sector + 1, run.node + 1)
@@ -267,6 +272,7 @@ class Combat:
                 # hold fire while the name card is up
                 self.intro_t -= dt
                 self.boss.move(dt, self)
+                self.boss.tick_shield(dt)
                 self.boss.t = 0.0
             else:
                 self.boss.update(dt, self)
@@ -325,6 +331,14 @@ class Combat:
                         hit = turret
                         break
             if hit is not None:
+                if b.invulnerable:
+                    # bounces off the entrance shield, same as the core
+                    self.audio.play("hit", 0.3, throttle=0.04)
+                    self.particles.burst(shot.x, shot.y, 2, 90,
+                                         (data.BLUE,), 0.2, 1)
+                    if not shot.pierce:
+                        shot.y = -999
+                    continue
                 hit.hp -= shot.dmg
                 hit.flash = 0.08
                 self.audio.play("hit", 0.5, throttle=0.03)
